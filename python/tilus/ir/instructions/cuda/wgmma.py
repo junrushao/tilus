@@ -14,7 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes import bf16, f8e4m3, f8e5m2, f16, i8, tf32, u1, u8
 from tilus.hidet.ir.expr import Expr
@@ -24,21 +26,21 @@ from tilus.ir.tensor import RegisterTensor, SharedTensor
 from tilus.utils import gcd
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WgmmaFenceInst(Instruction):
     @staticmethod
     def create() -> WgmmaFenceInst:
         return WgmmaFenceInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WgmmaCommitGroupInst(Instruction):
     @staticmethod
     def create() -> WgmmaCommitGroupInst:
         return WgmmaCommitGroupInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WgmmaWaitGroupInst(Instruction):
     n: Expr
 
@@ -47,7 +49,7 @@ class WgmmaWaitGroupInst(Instruction):
         return WgmmaWaitGroupInst(output=None, inputs=(), n=n)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WgmmaMmaSSInst(Instruction):
     @staticmethod
     def get_inst_mnk(
@@ -76,7 +78,7 @@ class WgmmaMmaSSInst(Instruction):
         return WgmmaMmaSSInst(output=None, inputs=(a, b, d))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WgmmaMmaRSInst(Instruction):
     @staticmethod
     def create(a: RegisterTensor, b: SharedTensor, d: RegisterTensor) -> WgmmaMmaRSInst:

@@ -19,6 +19,7 @@ import torch
 from tilus import float16, float32, int32
 from tilus.utils import benchmark_func, cdiv
 
+# tilus.option.parallel_workers(1)
 
 @tilus.autotune("block_m", [1, 4, 8])
 @tilus.autotune("block_n", [128, 256, 512, 1024])
@@ -108,10 +109,10 @@ def main():
     rows = []
 
     for m_size, n_size in [
-        (1823, 781),
-        (4096, 1024),
-        (4096, 4096),
-        (4096, 8192),
+        # (1823, 781),
+        # (4096, 1024),
+        # (4096, 4096),
+        # (4096, 8192),
         (8192, 8192),
     ]:
         softmax_kernel = FusedSoftmax()

@@ -41,7 +41,7 @@ def printf(format_string, *args):
         template_string = f'printf("{format_string}");'
     # if '\n' in format_string:
     #     raise ValueError('Please use printf(r"...\\n") instead of printf("...\\n").')
-    return BlackBoxStmt(template_string, *args)
+    return BlackBoxStmt(template_string=template_string, exprs=args)
 
 
 def comment(comment_string: str, style: Optional[str] = None) -> Stmt:
@@ -89,4 +89,4 @@ def comment(comment_string: str, style: Optional[str] = None) -> Stmt:
 
 
 def __builtin_assume(arg):
-    return BlackBoxStmt("__builtin_assume({});", arg)
+    return BlackBoxStmt(template_string="__builtin_assume({});", exprs=(arg,))

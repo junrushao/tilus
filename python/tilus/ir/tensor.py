@@ -14,20 +14,21 @@
 # limitations under the License.
 from __future__ import annotations
 
-import dataclasses
-from dataclasses import dataclass
-from functools import cached_property
 from typing import Optional, Sequence
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
 from tilus.hidet.ir.type import DataType
 from tilus.hidet.utils import same_list
+from tilus.ir._replace import replace
 from tilus.ir.layout import GlobalLayout, RegisterLayout, SharedLayout, TMemoryLayout
 from tilus.utils import nbytes_from_nbits, prod
 
 
-@dataclass(frozen=True, eq=False)
-class Tensor:
+@py_class
+class Tensor(tvm_ffi.Object):
     """Base class for all tensor types in Tilus.
 
     Attributes
@@ -78,7 +79,7 @@ class Tensor:
         raise RuntimeError("tensor.item(...) could only be used in Tilus Script.")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class RegisterTensor(Tensor):
     """A tensor that resides in the register memory.
 
@@ -138,7 +139,7 @@ class RegisterTensor(Tensor):
                 )
         return RegisterTensor(dtype=dtype, shape=tuple(shape), optional_layout=optional_layout)
 
-    @cached_property
+    @property
     def layout(self) -> RegisterLayout:
         """Get the layout of the RegisterTensor.
 
@@ -156,7 +157,7 @@ class RegisterTensor(Tensor):
             raise ValueError("The layout of RegisterTensor is not defined yet.")
         return self.optional_layout
 
-    @cached_property
+    @property
     def local_size(self) -> int:
         """Get the number of elements stored in each thread.
 
@@ -184,7 +185,7 @@ class RegisterTensor(Tensor):
             raise ValueError(f"Layout must be a RegisterLayout, but got {type(layout)}.")
         if not same_list(self.shape, layout.shape):
             raise ValueError(f"Shape mismatch: provided shape {self.shape} does not match layout shape {layout.shape}.")
-        return dataclasses.replace(self, optional_layout=layout)
+        return replace(self, optional_layout=layout)
 
     def has_layout(self) -> bool:
         """Check if the RegisterTensor has a layout defined.
@@ -201,7 +202,9 @@ class RegisterTensor(Tensor):
     converted in the Tilus Script transpiler defined in tilus.lang.transpiler module.
     """
 
-    __hash__ = object.__hash__  # use default hash function
+    # Use tvm_ffi Object's handle-based hash so dict lookups (memo, rewrite_map)
+    # work across different Python wrappers of the same underlying C handle.
+    __hash__ = tvm_ffi.Object.__hash__  # type: ignore[assignment]
 
     def __bool__(self):
         # We return True for all RegisterTensor so that we can use `if inst.output` to check whether the instruction
@@ -356,19 +359,14 @@ class RegisterTensor(Tensor):
         raise RuntimeError("tensor < tensor could only be used in Tilus Script.")
 
     def __eq__(self, other):
-        """Equal to comparison.
+        """Handle-based equality for dict/memo lookups.
 
-        Parameters
-        ----------
-        other: RegisterTensor | int | float | Expr
-            The tensor or scalar to compare with this tensor.
-
-        Returns
-        -------
-        ret: RegisterTensor
-            A new tensor that is the result of the comparison.
+        In Tilus Script mode, the transpiler intercepts ``==`` at the AST level
+        and never calls this.
         """
-        raise RuntimeError("tensor == tensor could only be used in Tilus Script.")
+        if isinstance(other, tvm_ffi.Object):
+            return self.same_as(other)
+        return NotImplemented
 
     def __ne__(self, value):
         """
@@ -543,7 +541,7 @@ class RegisterTensor(Tensor):
         raise RuntimeError("tensor.tolist() could only be used in Tilus Script.")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SharedTensor(Tensor):
     """A tensor that resides in the shared memory.
 
@@ -637,7 +635,7 @@ class SharedTensor(Tensor):
             raise ValueError(f"Layout must be a SharedLayout, but got {type(layout)}.")
         if not same_list(self.shape, layout.shape):
             raise ValueError(f"Shape mismatch: provided shape {self.shape} does not match layout shape {layout.shape}.")
-        return dataclasses.replace(self, optional_layout=layout)
+        return replace(self, optional_layout=layout)
 
     """
     The following methods are used for type hinting in Tilus Script. The corresponding operations/methods will be
@@ -654,7 +652,7 @@ class SharedTensor(Tensor):
         raise RuntimeError("shared_tensor.transpose(...) could only be used in Tilus Script.")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class TMemoryTensor(Tensor):
     shape: tuple[int, ...]
     optional_layout: Optional[TMemoryLayout]
@@ -683,7 +681,7 @@ class TMemoryTensor(Tensor):
     def with_layout(self, layout: TMemoryLayout) -> TMemoryTensor:
         if not same_list(self.shape, layout.shape):
             raise ValueError(f"Shape mismatch: provided shape {self.shape} does not match layout shape {layout.shape}.")
-        return dataclasses.replace(self, optional_layout=layout)
+        return replace(self, optional_layout=layout)
 
     """
     The following methods are used for type hinting in Tilus Script. The corresponding operations/methods will be
@@ -694,7 +692,7 @@ class TMemoryTensor(Tensor):
         raise RuntimeError("tmemory_tensor[...] could only be used in Tilus Script.")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class GlobalTensor(Tensor):
     """A tensor that resides in the global memory.
 
@@ -743,7 +741,7 @@ class GlobalTensor(Tensor):
     def with_layout(self, layout: GlobalLayout) -> GlobalTensor:
         if not isinstance(layout, GlobalLayout):
             raise ValueError(f"Layout must be a GlobalLayout, but got {type(layout)}.")
-        return dataclasses.replace(self, layout=layout)
+        return replace(self, layout=layout)
 
     """
     The following methods are used for type hinting in Tilus Script. The corresponding operations/methods will be

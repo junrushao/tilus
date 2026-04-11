@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -28,7 +26,6 @@ def register_functions():
 
     template = r"__nv_bfloat162 out = __hmul2(*reinterpret_cast<__nv_bfloat162*>({}), *reinterpret_cast<const __nv_bfloat162*>({})); *reinterpret_cast<__nv_bfloat162*>({}) = out;"
 
-    @no_type_check
     @script
     def mul_bf16x2_(d: void_p, a: uint32, b: uint32):
         attrs.func_kind = "cuda_internal"
@@ -37,7 +34,7 @@ def register_functions():
         # the following inst only supports for sm_90 and later
         # asm('mul.rn.bf16x2 %0, %1, %2;', outputs=[cast(d, ~uint32)[0]], inputs=[a, b], is_volatile=True)
 
-        BlackBoxStmt(template, ~a, ~b, d)
+        BlackBoxStmt(template_string=template, exprs=(~a, ~b, d))
 
     funcs = [mul_bf16x2_]
     for func in funcs:

@@ -13,50 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from typing import Any
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes.floats import FloatInfo, FloatType
 
 
+@py_class
 class FloatSubbyteType(FloatType):
-    def __init__(self, name: str, short_name: str, nbits: int, exponent_nbits: int, mantissa_nbits: int) -> None:
-        self._nbits: int = nbits
-        self._exponent_nbits: int = exponent_nbits
-        self._mantissa_nbits: int = mantissa_nbits
-        self._exponent_bias: int = (1 << (exponent_nbits - 1)) - 1
-        finfo = self._calculate_finfo()
-        super().__init__(
-            name=name,
-            short_name=short_name,
-            nbytes=-1,
-            min_value=finfo.min,
-            max_value=finfo.max,
-            eps=finfo.eps,
-            smallest_normal=finfo.smallest_normal,
-        )
-
-    def _calculate_finfo(self) -> FloatInfo:
-        # we do not include 'nan' or 'inf' in the sub-byte floating type representation
-        # to fully use its exponent bits
-        e_bits = self._exponent_nbits
-        m_bits = self._mantissa_nbits
-        e_bias = self._exponent_bias
-        if e_bits == 5:
-            # for float7_e5m1, float6_e5m0, etc.
-            # we use (11111)_exponent to represent 'inf'
-            max_value = math.pow(2.0, (1 << e_bits) - 1 - 1 - e_bias) * (2.0 - math.pow(2.0, -m_bits))
-        else:
-            # for other float types, we do not use (11111)_exponent to represent 'inf', instead
-            # we use all 1 exponent to represent normal numbers
-            max_value = math.pow(2.0, (1 << e_bits) - 1 - e_bias) * (2.0 - math.pow(2.0, -m_bits))
-
-        return FloatInfo(
-            bits=e_bits + m_bits + 1,
-            eps=math.pow(2.0, -m_bits),
-            min=-max_value,
-            max=max_value,
-            smallest_normal=math.pow(2.0, 1 - e_bias),
-            dtype=self,
-        )
+    _nbits: int
+    _exponent_bias: int
 
     @property
     def nbytes(self):
@@ -65,14 +33,6 @@ class FloatSubbyteType(FloatType):
     @property
     def nbits(self):
         return self._nbits
-
-    @property
-    def exponent_nbits(self):
-        return self._exponent_nbits
-
-    @property
-    def mantissa_nbits(self):
-        return self._mantissa_nbits
 
     def finfo(self) -> FloatInfo:
         return FloatInfo(
@@ -85,25 +45,65 @@ class FloatSubbyteType(FloatType):
         )
 
 
+def _calculate_subbyte_finfo(
+    exponent_nbits: int, mantissa_nbits: int, exponent_bias: int
+) -> tuple[float, float, float, float]:
+    """Calculate (min_value, max_value, eps, smallest_normal) for a sub-byte float type."""
+    e_bits = exponent_nbits
+    m_bits = mantissa_nbits
+    e_bias = exponent_bias
+    if e_bits == 5:
+        # for float7_e5m1, float6_e5m0, etc.
+        # we use (11111)_exponent to represent 'inf'
+        max_value = math.pow(2.0, (1 << e_bits) - 1 - 1 - e_bias) * (2.0 - math.pow(2.0, -m_bits))
+    else:
+        # for other float types, we do not use (11111)_exponent to represent 'inf', instead
+        # we use all 1 exponent to represent normal numbers
+        max_value = math.pow(2.0, (1 << e_bits) - 1 - e_bias) * (2.0 - math.pow(2.0, -m_bits))
+    eps = math.pow(2.0, -m_bits)
+    smallest_normal = math.pow(2.0, 1 - e_bias)
+    return -max_value, max_value, eps, smallest_normal
+
+
+def _make_float_subbyte_type(
+    name: str, short_name: str, nbits: int, exponent_nbits: int, mantissa_nbits: int
+) -> FloatSubbyteType:
+    exponent_bias = (1 << (exponent_nbits - 1)) - 1
+    min_value, max_value, eps, smallest_normal = _calculate_subbyte_finfo(exponent_nbits, mantissa_nbits, exponent_bias)
+    return FloatSubbyteType(
+        _name=name,
+        _short_name=short_name,
+        _nbytes=-1,
+        _min_value=min_value,
+        _max_value=max_value,
+        _eps=eps,
+        _smallest_normal=smallest_normal,
+        _nbits=nbits,
+        _exponent_nbits=exponent_nbits,
+        _mantissa_nbits=mantissa_nbits,
+        _exponent_bias=exponent_bias,
+    )
+
+
 # float7
-f7e5m1 = float7_e5m1 = FloatSubbyteType("float7_e5m1", "f7e5m1", 7, 5, 1)
-f7e4m2 = float7_e4m2 = FloatSubbyteType("float7_e4m2", "f7e4m2", 7, 4, 2)
-f7e3m3 = float7_e3m3 = FloatSubbyteType("float7_e3m3", "f7e3m3", 7, 3, 3)
-f7e2m4 = float7_e2m4 = FloatSubbyteType("float7_e2m4", "f7e2m4", 7, 2, 4)
+f7e5m1 = float7_e5m1 = _make_float_subbyte_type("float7_e5m1", "f7e5m1", 7, 5, 1)
+f7e4m2 = float7_e4m2 = _make_float_subbyte_type("float7_e4m2", "f7e4m2", 7, 4, 2)
+f7e3m3 = float7_e3m3 = _make_float_subbyte_type("float7_e3m3", "f7e3m3", 7, 3, 3)
+f7e2m4 = float7_e2m4 = _make_float_subbyte_type("float7_e2m4", "f7e2m4", 7, 2, 4)
 
 # float6
-f6e4m1 = float6_e4m1 = FloatSubbyteType("float6_e4m1", "f6e4m1", 6, 4, 1)
-f6e3m2 = float6_e3m2 = FloatSubbyteType("float6_e3m2", "f6e3m2", 6, 3, 2)
-f6e2m3 = float6_e2m3 = FloatSubbyteType("float6_e2m3", "f6e2m3", 6, 2, 3)
+f6e4m1 = float6_e4m1 = _make_float_subbyte_type("float6_e4m1", "f6e4m1", 6, 4, 1)
+f6e3m2 = float6_e3m2 = _make_float_subbyte_type("float6_e3m2", "f6e3m2", 6, 3, 2)
+f6e2m3 = float6_e2m3 = _make_float_subbyte_type("float6_e2m3", "f6e2m3", 6, 2, 3)
 
 # float5
-f5e3m1 = float5_e3m1 = FloatSubbyteType("float5_e3m1", "f5e3m1", 5, 3, 1)
-f5e2m2 = float5_e2m2 = FloatSubbyteType("float5_e2m2", "f5e2m2", 5, 2, 2)
-f5e1m3 = float5_e1m3 = FloatSubbyteType("float5_e1m3", "f5e1m3", 5, 1, 3)
+f5e3m1 = float5_e3m1 = _make_float_subbyte_type("float5_e3m1", "f5e3m1", 5, 3, 1)
+f5e2m2 = float5_e2m2 = _make_float_subbyte_type("float5_e2m2", "f5e2m2", 5, 2, 2)
+f5e1m3 = float5_e1m3 = _make_float_subbyte_type("float5_e1m3", "f5e1m3", 5, 1, 3)
 
 # float4
-f4e2m1 = float4_e2m1 = FloatSubbyteType("float4_e2m1", "f4e2m1", 4, 2, 1)
-f4e1m2 = float4_e1m2 = FloatSubbyteType("float4_e1m2", "f4e1m2", 4, 1, 2)
+f4e2m1 = float4_e2m1 = _make_float_subbyte_type("float4_e2m1", "f4e2m1", 4, 2, 1)
+f4e1m2 = float4_e1m2 = _make_float_subbyte_type("float4_e1m2", "f4e1m2", 4, 1, 2)
 
 # float3
-f3e1m1 = float3_e1m1 = FloatSubbyteType("float3_e1m1", "f3e1m1", 3, 1, 1)
+f3e1m1 = float3_e1m1 = _make_float_subbyte_type("float3_e1m1", "f3e1m1", 3, 1, 1)

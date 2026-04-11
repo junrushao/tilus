@@ -24,6 +24,8 @@ from tilus.ir.tensor import RegisterTensor
 
 
 class RegisterTensorWithMethods(RegisterTensor):
+    __slots__ = ("__dict__",)
+
     def __init__(self, tensor: RegisterTensor, builder: StmtBuilder):
         self.tensor: RegisterTensor = tensor
         self.builder: StmtBuilder = builder

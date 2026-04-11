@@ -143,10 +143,11 @@ class PruneUnusedFunctionRewriter(IRRewriter):
                 continue
             if len(node.callers) == 0:
                 unused_func_names.add(func.name)
-        for func_name in unused_func_names:
-            del module.functions[func_name]
-            if func_name in module.global_vars:
-                del module.global_vars[func_name]
+        if unused_func_names:
+            funcs = {name: f for name, f in module.functions.items() if name not in unused_func_names}
+            module.functions = funcs
+            gvars = {name: v for name, v in module.global_vars.items() if name not in unused_func_names}
+            module.global_vars = gvars
 
         return module
 
@@ -160,17 +161,21 @@ class InlineFunctionPass(Pass):
     def process_module(self, ir_module: IRModule) -> IRModule:
         call_graph = CallGraph(ir_module, allow_missing=True)
         updated_ir_module = ir_module.copy().reset_funcs()
+        functions = dict(updated_ir_module.functions)
         for node in call_graph.reversed_order:
             assert isinstance(node, CallGraphNode)
             func = inline_callees(node.func, updated_ir_module)
-            updated_ir_module.functions[func.name] = func
+            functions[func.name] = func
+        updated_ir_module.functions = functions
 
         updated_ir_module = prune_unused_functions(updated_ir_module)
 
         # add global variables that are not functions
-        updated_ir_module.global_vars.update(
+        global_vars = dict(updated_ir_module.global_vars)
+        global_vars.update(
             {name: var for name, var in ir_module.global_vars.items() if name not in ir_module.functions}
         )
+        updated_ir_module.global_vars = global_vars
 
         return updated_ir_module
 

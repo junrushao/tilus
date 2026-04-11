@@ -114,6 +114,8 @@ from ast import (
 )
 from typing import Any, Callable, Dict, Optional, Sequence, Type, Union
 
+import tvm_ffi
+
 import tilus.hidet.lang.attrs
 from tilus.hidet import ir
 from tilus.hidet.ir.builders import FunctionBuilder
@@ -432,7 +434,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
         allowed_types = (ir.Expr, ir.BaseType, Declaration, float, int, str, type(None))
         allowed_types += host_var_types
         assert isinstance(rhs, allowed_types) or (
-            isinstance(rhs, list) and all(isinstance(v, allowed_types) for v in rhs)
+            isinstance(rhs, (list, tvm_ffi.Array)) and all(isinstance(v, allowed_types) for v in rhs)
         ), 'unexpected value "{}" with type {}'.format(rhs, type(rhs))
 
         # three cases of assignment:
@@ -491,7 +493,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
             # example: a[3, 4] = 5.0
             base = self.visit(lhs.value)
             indices = self.visit(lhs.slice)
-            if not isinstance(indices, list):
+            if not isinstance(indices, (list, tvm_ffi.Array)):
                 indices = [indices]
             indices = [ir.expr.convert(idx) for idx in indices]
             self.current_scope.append(ir.BufferStoreStmt(buf=base, indices=indices, value=rhs))
@@ -514,7 +516,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
                     "hip.grid_dim",
                     "hip.dynamic_smem_bytes",
                 ]:
-                    if isinstance(rhs, (tuple, list)):
+                    if isinstance(rhs, (tuple, list, tvm_ffi.Array)):
                         rhs = [simplify(v) for v in rhs]
                     else:
                         rhs = simplify(rhs)
@@ -738,7 +740,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
         elif isinstance(lhs, str) and isinstance(rhs, str):
             assert isinstance(expr.op, Add)
             return lhs + rhs
-        elif isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)):
+        elif isinstance(lhs, (list, tuple, tvm_ffi.Array)) and isinstance(rhs, (list, tuple, tvm_ffi.Array)):
             assert isinstance(expr.op, Add)
             return list(lhs) + list(rhs)
         elif isinstance(lhs, (ir.Expr, float, int)) and isinstance(rhs, (ir.Expr, float, int)):
@@ -1002,7 +1004,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
 
         base_ty = infer_type(base)
         if False:  # TiledTensorType removed (cute)
-            if not isinstance(indices, (tuple, list)):
+            if not isinstance(indices, (tuple, list, tvm_ffi.Array)):
                 indices = [indices]
 
             def slice_(items):
@@ -1012,7 +1014,7 @@ class PythonToHidetTranslator(PythonAstFunctor):
                         if any(x is not None for x in [item.start, item.stop, item.step]):
                             raise HidetProgramError(self, expr, "Slicing a tensor not supported")
                         coord.append(None)
-                    elif isinstance(item, (tuple, list)):
+                    elif isinstance(item, (tuple, list, tvm_ffi.Array)):
                         coord.append(slice_(item))
                     else:
                         coord.append(item)

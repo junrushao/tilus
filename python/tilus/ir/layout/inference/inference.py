@@ -216,7 +216,9 @@ def infer_layout(func: Function) -> Function:
             )
         raise LayoutInferenceError("\n".join(lines))
 
+    _iter_count = 0
     while True:
+        _iter_count += 1
         instruction_collector = InstructionCollector()
         instruction_collector.visit(func)
 

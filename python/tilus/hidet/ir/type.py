@@ -28,6 +28,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
+
 from tilus.hidet.ir.node import Node
 
 # typing forward declaration
@@ -35,6 +38,7 @@ Expr = "Expr"
 Int = Union[int, Expr]
 
 
+@py_class
 class BaseType(Node):
     def __invert__(self) -> BaseType:
         # get the pointer type that points to current type
@@ -48,7 +52,7 @@ class BaseType(Node):
             raise ValueError("Can not recognize type {}".format(self))
 
     def __getitem__(self, item):
-        if isinstance(item, (tuple, list)):
+        if isinstance(item, (tuple, list, tvm_ffi.Array)):
             if len(item) == 1:
                 item = item[0]
             else:
@@ -79,16 +83,16 @@ class BaseType(Node):
         return self
 
 
+@py_class
 class DataType(BaseType):
     """
     The data type that defines how to interpret the data in memory.
 
     """
 
-    def __init__(self, name: str, short_name: str, nbytes: int):
-        self._name: str = name
-        self._short_name: str = short_name
-        self._nbytes: int = nbytes
+    _name: str
+    _short_name: str
+    _nbytes: int
 
     def __str__(self):
         return "hidet.{}".format(self.name)
@@ -119,7 +123,7 @@ class DataType(BaseType):
 
         if (
             isinstance(value, built_types)
-            or isinstance(value, (list, tuple))
+            or isinstance(value, (list, tuple, tvm_ffi.Array))
             and all(isinstance(v, built_types) for v in value)
         ):
             return self.constant(value)
@@ -131,7 +135,7 @@ class DataType(BaseType):
             raise ValueError("Can not convert {} to {}".format(value, self))
 
     def __getitem__(self, item):
-        if not isinstance(item, (tuple, list)):
+        if not isinstance(item, (tuple, list, tvm_ffi.Array)):
             item = (item,)
         return tensor_type(dtype=self, shape=list(item))
 
@@ -221,25 +225,24 @@ class DataType(BaseType):
         raise NotImplementedError()
 
 
+@py_class
 class TensorType(BaseType):
-    def __init__(self, dtype=None, shape=None, layout=None):
-        """
-        A tensor type.
+    """
+    A tensor type.
 
-        Parameters
-        ----------
-        dtype: DataType
-            The data type of the tensor.
-        shape: Tuple[Expr, ...]
-            The shape of the tensor.
-        layout: hidet.ir.layout.DataLayout
-            The layout of the tensor.
-        """
-        from tilus.hidet.ir.layout import DataLayout
+    Parameters
+    ----------
+    dtype: DataType
+        The data type of the tensor.
+    shape: Tuple[Expr, ...]
+        The shape of the tensor.
+    layout: hidet.ir.layout.DataLayout
+        The layout of the tensor.
+    """
 
-        self.dtype: DataType = dtype
-        self.shape: Tuple[Expr, ...] = shape
-        self.layout: DataLayout = layout
+    dtype: Any = None
+    shape: Any = None
+    layout: Any = None
 
     def __invert__(self):
         return TensorPointerType.from_tensor_type(self)
@@ -254,23 +257,27 @@ class TensorType(BaseType):
         return [int(v) for v in self.shape]
 
 
+@py_class
 class VoidType(BaseType):
     pass
 
 
+@py_class
 class StringType(BaseType):
     pass
 
 
+@py_class
 class PointerType(BaseType):
-    def __init__(self, base_type, specifiers: Optional[Sequence[str]] = None, use_bracket: bool = False):
-        super().__init__()
-        if isinstance(base_type, str):
-            base_type = data_type(base_type)
-        self.base_type: BaseType = base_type
+    base_type: Any
+    specifiers: Any = None
+    use_bracket: bool = False
+
+    def __post_init__(self):
+        if isinstance(self.base_type, str):
+            self.base_type = data_type(self.base_type)
         # todo: move the following attributes to DeclareStmt
-        self.specifiers: List[str] = list(specifiers) if specifiers else []
-        self.use_bracket: bool = use_bracket
+        self.specifiers = list(self.specifiers) if self.specifiers else []
 
     def __call__(self, x):
         from tilus.hidet.ir.expr import Constant, Expr, cast, constant  # pylint: disable=redefined-outer-name
@@ -285,61 +292,62 @@ class PointerType(BaseType):
             raise ValueError("Can not convert {} to {}".format(x, self))
 
 
+@py_class
 class ReferenceType(BaseType):
-    def __init__(self, base_type):
-        super().__init__()
-        self.base_type = base_type
+    base_type: BaseType
 
 
+@py_class
 class TensorPointerType(BaseType):
-    def __init__(self, ttype: TensorType):
-        """
-        A pointer type that points to tensor.
-        """
-        self.tensor_type: TensorType = ttype
+    """
+    A pointer type that points to tensor.
+    """
+
+    tensor_type: TensorType
 
     @staticmethod
     def from_tensor_type(tp: TensorType) -> TensorPointerType:
-        tpt = object.__new__(TensorPointerType)
-        tpt.tensor_type = tp
-        return tpt
+        return TensorPointerType(tensor_type=tp)
 
 
+@py_class
 class ArrayType(BaseType):
-    def __init__(self, base_type, size: int):
-        super().__init__()
-        self.base_type: BaseType = base_type
-        self.size: int = size
+    base_type: BaseType
+    size: int
 
-        assert isinstance(base_type, BaseType) and not isinstance(base_type, (ArrayType, TensorType))
-        assert isinstance(size, int) and size >= 0
+    def __post_init__(self):
+        assert isinstance(self.base_type, BaseType) and not isinstance(self.base_type, (ArrayType, TensorType))
+        assert isinstance(self.size, int) and self.size >= 0
 
 
 TypeLike = Union[str, BaseType]
 
 
+@py_class
 class FuncType(BaseType):
-    def __init__(
-        self,
-        param_types: Optional[List[TypeLike]] = None,
-        ret_type: Optional[TypeLike] = None,
-        type_infer_func: Optional[Callable] = None,  # Callable[[a number of BaseType], BaseType]
-    ):
-        self.param_types: Optional[List[BaseType]] = (
-            [self._convert_type(tp) for tp in param_types] if param_types is not None else None
-        )
-        self.ret_type: Optional[BaseType] = self._convert_type(ret_type) if ret_type is not None else None
-        self.type_infer_func: Optional[Callable[[List[BaseType]], BaseType]] = type_infer_func
+    param_types: Any = None
+    ret_type: Any = None
+    type_infer_func: Any = None  # string name registered via tvm_ffi.register_global_func
+
+    def __post_init__(self):
+        if self.param_types is not None:
+            self.param_types = [self._convert_type(tp) for tp in self.param_types]
+        if self.ret_type is not None:
+            self.ret_type = self._convert_type(self.ret_type)
+        if self.type_infer_func is not None and not isinstance(self.type_infer_func, str):
+            raise TypeError(
+                f"type_infer_func must be a string name registered via tvm_ffi.register_global_func(), "
+                f"got {type(self.type_infer_func).__name__}"
+            )
         msg = "Please provide either a static type or a type infer func"
-        assert not all(v is None for v in [ret_type, type_infer_func]), msg
+        assert not all(v is None for v in [self.ret_type, self.type_infer_func]), msg
 
     def ret_type_on(self, arg_types: List[BaseType]) -> BaseType:
         if self.ret_type is not None:
-            # todo: add type checking
             assert isinstance(self.ret_type, BaseType)
             return self.ret_type
         else:
-            return self.type_infer_func(arg_types)
+            return tvm_ffi.get_global_func(self.type_infer_func)(arg_types)
 
     def _convert_type(self, tp: Union[str, BaseType]):
         if isinstance(tp, str):
@@ -349,13 +357,13 @@ class FuncType(BaseType):
 
     @staticmethod
     def from_func(func):
-        return FuncType([param.type for param in func.params], func.ret_type)
+        return FuncType(param_types=[param.type for param in func.params], ret_type=func.ret_type)
 
 
+@py_class
 class OpaqueType(BaseType):
-    def __init__(self, cpp_name: str, *modifiers: str):
-        self.cpp_name: str = cpp_name
-        self.modifiers: Sequence[str] = modifiers
+    cpp_name: str
+    modifiers: Any = ()
 
 
 def tensor_type(dtype, shape: Optional[Sequence[Union[int, Expr]]] = None, layout=None):
@@ -400,7 +408,7 @@ def tensor_type(dtype, shape: Optional[Sequence[Union[int, Expr]]] = None, layou
             layout = simplify(layout, enable_rules=True)
     else:
         assert isinstance(layout, DataLayout)
-        assert isinstance(shape, (list, tuple))
+        assert isinstance(shape, (list, tuple, tvm_ffi.Array))
         assert len(shape) == len(layout.shape)
     shape = convert(shape)
     return TensorType(dtype, shape, layout)
@@ -532,8 +540,8 @@ def sizeof(tp: BaseType) -> int:
         raise NotImplementedError(type(tp))
 
 
-void_p = PointerType(VoidType())
-byte_p = PointerType(data_type("uint8"))
+void_p = PointerType(base_type=VoidType())
+byte_p = PointerType(base_type=data_type("uint8"))
 void = VoidType()
 
 

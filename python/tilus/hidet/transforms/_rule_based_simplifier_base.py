@@ -58,6 +58,7 @@ from tilus.hidet.ir.expr import (
 )
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.functors import IRRewriter
+from tilus.hidet.ir.functors.stmt_functor import _unchanged
 from tilus.hidet.ir.stmt import ForStmt, LetStmt
 from tilus.hidet.ir.tools import rewrite, simplify
 from tilus.hidet.transforms.base import FunctionPass
@@ -274,14 +275,32 @@ class RuleBasedSimplifier(IRRewriter):
             if obj in self.bound and self.bound[obj].value is not None and not isinstance(obj, Constant):
                 return convert(self.bound[obj].value)
             cur = IRRewriter.visit(self, obj)
-            while True:
+            for _guard in range(1000):
                 orig_obj = cur
                 cur = self.apply_rule(cur)
+                step1_is = cur is orig_obj
                 cur = self.const_expr_simplifier(cur)
+                step2_is = cur is orig_obj
                 cur = self.apply_bound_aware_rule(cur)
+                step3_is = cur is orig_obj
                 cur = self.const_expr_simplifier(cur)
-                if orig_obj is cur:
+                step4_is = cur is orig_obj
+                if orig_obj is cur or (hasattr(orig_obj, "same_as") and orig_obj.same_as(cur)):
                     break
+                if _guard == 2:
+                    import sys
+
+                    sys.stderr.write(
+                        f"  [DETAIL] {type(orig_obj).__name__}: rule={step1_is}, const1={step2_is}, bound={step3_is}, const2={step4_is}\n"
+                    )
+                    sys.stderr.flush()
+            else:
+                import sys
+
+                sys.stderr.write(
+                    f"  [WARN] RuleBasedSimplifier: did not converge after 1000 iters on {type(cur).__name__}\n"
+                )
+                sys.stderr.flush()
             self.memo[obj] = cur
             return cur
         else:
@@ -318,23 +337,33 @@ class RuleBasedSimplifier(IRRewriter):
         return IRRewriter.visit_Equal(self, e)
 
     def visit_LetStmt(self, stmt: LetStmt):
-        bind_vars = self(stmt.bind_vars)
-        bind_values = [self.visit(bind_value) for bind_value in stmt.bind_values]
-        body = self.visit(stmt.body)
+        orig_bind_vars = stmt.bind_vars
+        orig_bind_values = stmt.bind_values
+        orig_body = stmt.body
+        bind_vars = self(orig_bind_vars)
+        bind_values = [self.visit(bind_value) for bind_value in orig_bind_values]
+        body = self.visit(orig_body)
         bind_vars = [
-            updated if isinstance(updated, Var) else original for original, updated in zip(stmt.bind_vars, bind_vars)
+            updated if isinstance(updated, Var) else original for original, updated in zip(orig_bind_vars, bind_vars)
         ]
-        if same_list(bind_vars, stmt.bind_vars) and same_list(bind_values, stmt.bind_values) and body is stmt.body:
+        if (
+            same_list(bind_vars, orig_bind_vars)
+            and same_list(bind_values, orig_bind_values)
+            and _unchanged(body, orig_body)
+        ):
             return stmt
         else:
             return LetStmt(bind_vars, bind_values, body)
 
     def visit_ForStmt(self, stmt: ForStmt):
-        loop_var = self(stmt.loop_var)
-        loop_var = loop_var if isinstance(loop_var, Var) else stmt.loop_var
-        extent = self.visit(stmt.extent)
-        body = self.visit(stmt.body)
-        if loop_var is stmt.loop_var and extent is stmt.extent and body is stmt.body:
+        orig_loop_var = stmt.loop_var
+        orig_extent = stmt.extent
+        orig_body = stmt.body
+        loop_var = self(orig_loop_var)
+        loop_var = loop_var if isinstance(loop_var, Var) else orig_loop_var
+        extent = self.visit(orig_extent)
+        body = self.visit(orig_body)
+        if _unchanged(loop_var, orig_loop_var) and _unchanged(extent, orig_extent) and _unchanged(body, orig_body):
             return stmt
         else:
             return ForStmt(loop_var, extent, body=body, attr=stmt.attr)

@@ -180,7 +180,7 @@ class FunctionCodegen(IRFunctor):
                     grid_dim=normalize_dim3(kernel_func.get_attr("cuda.grid_dim")),  # type: ignore
                     cluster_dim=normalize_dim3(kernel_func.get_attr("cuda.cluster_dim", default=1)),  # type: ignore
                     block_dim=normalize_dim3(kernel_func.get_attr("cuda.block_dim")),  # type: ignore
-                    shared_mem=int32(dynamic_shared_bytes),
+                    shared_mem_bytes=int32(dynamic_shared_bytes),
                     target="cuda",
                 )
             )

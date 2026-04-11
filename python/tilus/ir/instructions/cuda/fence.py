@@ -14,12 +14,12 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.inst import Instruction
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class FenceProxyAsync(Instruction):
     """Bidirectional async proxy fence: fence.proxy.async.{space}."""
 
@@ -33,7 +33,7 @@ class FenceProxyAsync(Instruction):
         return FenceProxyAsync(output=None, inputs=(), space=space)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class FenceProxyAsyncRelease(Instruction):
     """Unidirectional generic-to-async release proxy fence.
 

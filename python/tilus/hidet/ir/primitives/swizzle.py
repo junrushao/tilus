@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -24,7 +22,6 @@ from tilus.hidet.utils import initialize
 def register_swizzle_primitive():
     from tilus.hidet.lang import attrs, script
 
-    @no_type_check
     @script
     def swizzle_impl(x: int32, mbase: int32, bbits: int32, sshift: int32) -> int32:
         attrs.func_kind = "cuda_internal"

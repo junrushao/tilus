@@ -14,17 +14,20 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr
 from tilus.ir.inst import Instruction
 from tilus.ir.layout import RegisterLayout, SharedLayout
+from tilus.ir.node import IRNode
 from tilus.ir.tensor import RegisterTensor, SharedTensor, Tensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AnnotateLayoutInst(Instruction):
-    layout: RegisterLayout | SharedLayout
+    layout: IRNode  # RegisterLayout | SharedLayout
 
     @staticmethod
     def create(tensor: Tensor, layout: RegisterLayout | SharedLayout) -> AnnotateLayoutInst:
@@ -37,7 +40,7 @@ class AnnotateLayoutInst(Instruction):
         return AnnotateLayoutInst(output=None, inputs=(tensor,), layout=layout)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AssumeInst(Instruction):
     condition: Expr
 

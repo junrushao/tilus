@@ -23,6 +23,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tvm_ffi
+
 from tilus.hidet.ir.dtypes import float32, float32x2, float32x4
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import primitive_func_pool, register_primitive_function
@@ -96,7 +98,7 @@ class CUDAFloat32MathFunctionSet(MathFunctionSet):
         return entry.var(*args)
 
     def make_vector(self, *items) -> Expr:
-        if not isinstance(items, (list, tuple)):
+        if not isinstance(items, (list, tuple, tvm_ffi.Array)):
             raise ValueError("float32 requires a list of items")
         items = list(items)
 

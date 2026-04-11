@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Sequence, no_type_check
+from typing import Optional, Sequence
 
 from tilus.hidet.ir.dtypes import int32, uint16, uint32, uint64
 from tilus.hidet.ir.expr import Expr
@@ -75,7 +75,6 @@ def register_copy_async_tensor():
                 coords_type = meta.types([int32 for _ in range(dim)])
                 cache_hint_type = meta.types([uint64] if has_cache_hint else [])
 
-                @no_type_check
                 @register_primitive_function_decorator
                 @script
                 def cp_async_tensor_global_to_shared_device(
@@ -127,7 +126,6 @@ def register_copy_async_tensor():
                     cta_mask_type = meta.types([uint16] if multicast else [])
                     cache_hint_type = meta.types([uint64] if has_cache_hint else [])
 
-                    @no_type_check
                     @register_primitive_function_decorator
                     @script
                     def cp_async_tensor_global_to_cluster_shared_device(
@@ -160,7 +158,6 @@ def register_copy_async_tensor():
             coords_type = meta.types([int32 for _ in range(dim)])
             cache_hint_type = meta.types([uint64] if has_cache_hint else [])
 
-            @no_type_check
             @register_primitive_function_decorator
             @script
             def cp_async_tensor_shared_to_global_device(
@@ -175,7 +172,6 @@ def register_copy_async_tensor():
                     memory_fence=True,
                 )
 
-    @no_type_check
     @register_primitive_function_decorator
     @script
     def cp_async_tensor_commit_group():
@@ -185,7 +181,6 @@ def register_copy_async_tensor():
 
     for n in [0, 1, 2, 3, 4, 5, 6]:
 
-        @no_type_check
         @register_primitive_function_decorator
         @script
         def func():
@@ -195,7 +190,6 @@ def register_copy_async_tensor():
 
     for n in [0, 1, 2, 3, 4, 5, 6]:
 
-        @no_type_check
         @register_primitive_function_decorator
         @script
         def func_read():

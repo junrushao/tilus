@@ -53,44 +53,37 @@ from tilus.hidet.utils import same_list
 from .base_functor import BaseFunctor, BaseRewriter, BaseVisitor
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class StmtFunctor(BaseFunctor):
+    _type_dispatch = {
+        EvaluateStmt: "visit_EvaluateStmt",
+        DeclareStmt: "visit_DeclareStmt",
+        BufferStoreStmt: "visit_BufferStoreStmt",
+        AssignStmt: "visit_AssignStmt",
+        LetStmt: "visit_LetStmt",
+        ForStmt: "visit_ForStmt",
+        ForMappingStmt: "visit_ForTaskStmt",
+        WhileStmt: "visit_WhileStmt",
+        BreakStmt: "visit_BreakStmt",
+        ContinueStmt: "visit_ContinueStmt",
+        IfStmt: "visit_IfStmt",
+        ReturnStmt: "visit_ReturnStmt",
+        AsmStmt: "visit_AsmStmt",
+        LaunchKernelStmt: "visit_LaunchKernelStmt",
+        AssertStmt: "visit_AssertStmt",
+        BlackBoxStmt: "visit_BlackBoxStmt",
+        SeqStmt: "visit_SeqStmt",
+    }
+
     def visit_dispatch(self, node: Node):
-        if isinstance(node, EvaluateStmt):
-            return self.visit_EvaluateStmt(node)
-        elif isinstance(node, DeclareStmt):
-            return self.visit_DeclareStmt(node)
-        elif isinstance(node, BufferStoreStmt):
-            return self.visit_BufferStoreStmt(node)
-        elif isinstance(node, AssignStmt):
-            return self.visit_AssignStmt(node)
-        elif isinstance(node, LetStmt):
-            return self.visit_LetStmt(node)
-        elif isinstance(node, ForStmt):
-            return self.visit_ForStmt(node)
-        elif isinstance(node, ForMappingStmt):
-            return self.visit_ForTaskStmt(node)
-        elif isinstance(node, WhileStmt):
-            return self.visit_WhileStmt(node)
-        elif isinstance(node, BreakStmt):
-            return self.visit_BreakStmt(node)
-        elif isinstance(node, ContinueStmt):
-            return self.visit_ContinueStmt(node)
-        elif isinstance(node, IfStmt):
-            return self.visit_IfStmt(node)
-        elif isinstance(node, ReturnStmt):
-            return self.visit_ReturnStmt(node)
-        elif isinstance(node, AsmStmt):
-            return self.visit_AsmStmt(node)
-        elif isinstance(node, LaunchKernelStmt):
-            return self.visit_LaunchKernelStmt(node)
-        elif isinstance(node, AssertStmt):
-            return self.visit_AssertStmt(node)
-        elif isinstance(node, BlackBoxStmt):
-            return self.visit_BlackBoxStmt(node)
-        elif isinstance(node, SeqStmt):
-            return self.visit_SeqStmt(node)
-        else:
-            return NotImplemented
+        method_name = StmtFunctor._type_dispatch.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
+        return NotImplemented
 
     def visit_DeclareStmt(self, stmt: DeclareStmt):
         raise NotImplementedError()
@@ -251,65 +244,91 @@ class StmtRewriter(StmtFunctor, BaseRewriter):
         return ret
 
     def visit_DeclareStmt(self, stmt: DeclareStmt):
-        v = self.visit(stmt.var)
-        init = self.visit(stmt.init) if stmt.init is not None else None
-        if v is stmt.var and init is stmt.init:
+        orig_var = stmt.var
+        orig_init = stmt.init
+        v = self.visit(orig_var)
+        init = self.visit(orig_init) if orig_init is not None else None
+        if _unchanged(v, orig_var) and _unchanged(init, orig_init):
             return stmt
         else:
             return DeclareStmt(v, init, stmt.is_static, stmt.scope)
 
     def visit_EvaluateStmt(self, stmt: EvaluateStmt):
-        e = self.visit(stmt.expr)
-        if e is stmt.expr:
+        orig_expr = stmt.expr
+        e = self.visit(orig_expr)
+        if _unchanged(e, orig_expr):
             return stmt
         else:
             return EvaluateStmt(e)
 
     def visit_BufferStoreStmt(self, stmt: BufferStoreStmt):
-        buf = self.visit(stmt.buf)
-        indices = [self.visit(e) for e in stmt.indices]
-        value = self.visit(stmt.value)
-        if buf is stmt.buf and all(a is b for a, b in zip(indices, stmt.indices)) and value is stmt.value:
+        orig_buf = stmt.buf
+        orig_indices = stmt.indices
+        orig_value = stmt.value
+        buf = self.visit(orig_buf)
+        indices = [self.visit(e) for e in orig_indices]
+        value = self.visit(orig_value)
+        if (
+            _unchanged(buf, orig_buf)
+            and all(_unchanged(a, b) for a, b in zip(indices, orig_indices))
+            and _unchanged(value, orig_value)
+        ):
             return stmt
         else:
             return BufferStoreStmt(buf, indices, value, stmt.protected)
 
     def visit_AssignStmt(self, stmt: AssignStmt):
-        v = self.visit(stmt.var)
-        value = self.visit(stmt.value)
-        if v is stmt.var and value is stmt.value:
+        orig_var = stmt.var
+        orig_value = stmt.value
+        v = self.visit(orig_var)
+        value = self.visit(orig_value)
+        if _unchanged(v, orig_var) and _unchanged(value, orig_value):
             return stmt
         else:
             return AssignStmt(v, value)
 
     def visit_LetStmt(self, stmt: LetStmt):
-        bind_vars = [self.visit(bind_var) for bind_var in stmt.bind_vars]
-        bind_values = [self.visit(bind_value) for bind_value in stmt.bind_values]
-        body = self.visit(stmt.body)
-        if same_list(bind_vars, stmt.bind_vars) and same_list(bind_values, stmt.bind_values) and body is stmt.body:
+        orig_bind_vars = stmt.bind_vars
+        orig_bind_values = stmt.bind_values
+        orig_body = stmt.body
+        bind_vars = [self.visit(bind_var) for bind_var in orig_bind_vars]
+        bind_values = [self.visit(bind_value) for bind_value in orig_bind_values]
+        body = self.visit(orig_body)
+        if (
+            same_list(bind_vars, orig_bind_vars)
+            and same_list(bind_values, orig_bind_values)
+            and _unchanged(body, orig_body)
+        ):
             return stmt
         else:
             return LetStmt(bind_vars, bind_values, body)
 
     def visit_ForStmt(self, stmt: ForStmt):
-        loop_var = self.visit(stmt.loop_var)
-        extent = self.visit(stmt.extent)
-        body = self.visit(stmt.body)
-        if loop_var is stmt.loop_var and extent is stmt.extent and body is stmt.body:
+        orig_loop_var = stmt.loop_var
+        orig_extent = stmt.extent
+        orig_body = stmt.body
+        loop_var = self.visit(orig_loop_var)
+        extent = self.visit(orig_extent)
+        body = self.visit(orig_body)
+        if _unchanged(loop_var, orig_loop_var) and _unchanged(extent, orig_extent) and _unchanged(body, orig_body):
             return stmt
         else:
             return ForStmt(loop_var, extent, body=body, attr=stmt.attr)
 
     def visit_ForTaskStmt(self, stmt: ForMappingStmt):
-        loop_vars: List[Expr] = [self.visit(v) for v in stmt.loop_vars]
-        mapping = self.visit(stmt.mapping)
-        worker = self.visit(stmt.worker)
-        body = self.visit(stmt.body)
+        orig_loop_vars = stmt.loop_vars
+        orig_mapping = stmt.mapping
+        orig_worker = stmt.worker
+        orig_body = stmt.body
+        loop_vars: List[Expr] = [self.visit(v) for v in orig_loop_vars]
+        mapping = self.visit(orig_mapping)
+        worker = self.visit(orig_worker)
+        body = self.visit(orig_body)
         if (
-            same_list(loop_vars, stmt.loop_vars)
-            and worker is stmt.worker
-            and body is stmt.body
-            and mapping is stmt.mapping
+            same_list(loop_vars, orig_loop_vars)
+            and _unchanged(worker, orig_worker)
+            and _unchanged(body, orig_body)
+            and _unchanged(mapping, orig_mapping)
         ):
             return stmt
         else:
@@ -318,9 +337,11 @@ class StmtRewriter(StmtFunctor, BaseRewriter):
             return ForMappingStmt(loop_vars=asserted_loop_vars, mapping=mapping, worker=worker, body=body)
 
     def visit_WhileStmt(self, stmt: WhileStmt):
-        cond = self.visit(stmt.cond)
-        body = self.visit(stmt.body)
-        if cond is stmt.cond and body is stmt.body:
+        orig_cond = stmt.cond
+        orig_body = stmt.body
+        cond = self.visit(orig_cond)
+        body = self.visit(orig_body)
+        if _unchanged(cond, orig_cond) and _unchanged(body, orig_body):
             return stmt
         else:
             return WhileStmt(cond, body)
@@ -332,68 +353,98 @@ class StmtRewriter(StmtFunctor, BaseRewriter):
         return stmt
 
     def visit_IfStmt(self, stmt: IfStmt):
-        cond = self.visit(stmt.cond)
-        then_body = self.visit(stmt.then_body)
-        else_body = self.visit(stmt.else_body) if stmt.else_body else None
-        if cond is stmt.cond and then_body is stmt.then_body and else_body is stmt.else_body:
+        orig_cond = stmt.cond
+        orig_then_body = stmt.then_body
+        orig_else_body = stmt.else_body
+        cond = self.visit(orig_cond)
+        then_body = self.visit(orig_then_body)
+        else_body = self.visit(orig_else_body) if orig_else_body else None
+        if (
+            _unchanged(cond, orig_cond)
+            and _unchanged(then_body, orig_then_body)
+            and _unchanged(else_body, orig_else_body)
+        ):
             return stmt
         else:
             return IfStmt(cond, then_body, else_body)
 
     def visit_ReturnStmt(self, stmt: ReturnStmt):
-        ret_value = self.visit(stmt.ret_value) if stmt.ret_value is not None else None
-        if ret_value is stmt.ret_value:
+        orig_ret_value = stmt.ret_value
+        ret_value = self.visit(orig_ret_value) if orig_ret_value is not None else None
+        if _unchanged(ret_value, orig_ret_value):
             return stmt
         else:
             return ReturnStmt(ret_value)
 
     def visit_AssertStmt(self, stmt: AssertStmt):
-        cond = self.visit(stmt.cond)
-        if cond is stmt.cond:
+        orig_cond = stmt.cond
+        cond = self.visit(orig_cond)
+        if _unchanged(cond, orig_cond):
             return stmt
         else:
             return AssertStmt(cond, stmt.msg)
 
     def visit_AsmStmt(self, stmt: AsmStmt):
-        input_exprs = [self.visit(e) for e in stmt.input_exprs]
-        output_exprs = [self.visit(e) for e in stmt.output_exprs]
-        if same_list(input_exprs, stmt.input_exprs) and same_list(output_exprs, stmt.output_exprs):
+        orig_input_exprs = stmt.input_exprs
+        orig_output_exprs = stmt.output_exprs
+        input_exprs = [self.visit(e) for e in orig_input_exprs]
+        output_exprs = [self.visit(e) for e in orig_output_exprs]
+        if same_list(input_exprs, orig_input_exprs) and same_list(output_exprs, orig_output_exprs):
             return stmt
         else:
             return AsmStmt(
-                stmt.template_string,
-                list(zip(stmt.output_labels, output_exprs)),
-                list(zip(stmt.input_labels, input_exprs)),
-                stmt.is_volatile,
+                template_string=stmt.template_string,
+                output_labels=stmt.output_labels,
+                output_exprs=output_exprs,
+                input_labels=stmt.input_labels,
+                input_exprs=input_exprs,
+                is_volatile=stmt.is_volatile,
+                memory_fence=stmt.memory_fence,
             )
 
     def visit_LaunchKernelStmt(self, stmt: LaunchKernelStmt):
-        func_var = self.visit(stmt.func_var)
-        args = [self.visit(e) for e in stmt.args]
-        grid_dim = tuple(self.visit(stmt.grid_dim[i]) for i in range(3))
-        cluster_dim = tuple(self.visit(stmt.cluster_dim[i]) for i in range(3))
-        block_dim = tuple(self.visit(stmt.block_dim[i]) for i in range(3))
-        shared_mem_bytes = self.visit(stmt.shared_mem_bytes)
+        orig_func_var = stmt.func_var
+        orig_args = stmt.args
+        orig_grid_dim = stmt.grid_dim
+        orig_cluster_dim = stmt.cluster_dim
+        orig_block_dim = stmt.block_dim
+        orig_shared_mem_bytes = stmt.shared_mem_bytes
+        func_var = self.visit(orig_func_var)
+        args = [self.visit(e) for e in orig_args]
+        grid_dim = tuple(self.visit(orig_grid_dim[i]) for i in range(3))
+        cluster_dim = tuple(self.visit(orig_cluster_dim[i]) for i in range(3))
+        block_dim = tuple(self.visit(orig_block_dim[i]) for i in range(3))
+        shared_mem_bytes = self.visit(orig_shared_mem_bytes)
         if same_list(
             [func_var, *args, *grid_dim, *block_dim, shared_mem_bytes],
-            [stmt.func_var, *stmt.args, *stmt.grid_dim, *stmt.block_dim, stmt.shared_mem_bytes],
+            [orig_func_var, *orig_args, *orig_grid_dim, *orig_block_dim, orig_shared_mem_bytes],
         ):
             return stmt
         else:
-            return LaunchKernelStmt(func_var, args, grid_dim, cluster_dim, block_dim, shared_mem_bytes, stmt.target)
+            return LaunchKernelStmt(
+                func_var=func_var,
+                args=args,
+                grid_dim=grid_dim,
+                cluster_dim=cluster_dim,
+                block_dim=block_dim,
+                shared_mem_bytes=shared_mem_bytes,
+                target=stmt.target,
+            )
 
     def visit_BlackBoxStmt(self, stmt: BlackBoxStmt):
-        exprs = [self.visit(e) for e in stmt.exprs]
-        if same_list(exprs, stmt.exprs):
+        orig_exprs = stmt.exprs
+        exprs = [self.visit(e) for e in orig_exprs]
+        if same_list(exprs, orig_exprs):
             return stmt
         else:
-            return BlackBoxStmt(stmt.template_string, *exprs)
+            return BlackBoxStmt(template_string=stmt.template_string, exprs=exprs)
 
     def visit_SeqStmt(self, stmt: SeqStmt):
+        orig_seq = stmt.seq
         seq = []
-        for s in stmt.seq:
+        for s in orig_seq:
             seq.append(self.visit(s))
-        if all(a is b for a, b in zip(seq, stmt.seq)):
+        if all(_unchanged(a, b) for a, b in zip(seq, orig_seq)):
             return stmt
         else:
             return SeqStmt(seq)

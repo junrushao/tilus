@@ -18,6 +18,8 @@ from tilus.ir.tensor import GlobalTensor
 
 
 class GlobalTensorWithMethods(GlobalTensor):
+    __slots__ = ("__dict__",)
+
     def __init__(self, tensor: GlobalTensor, builder: StmtBuilder):
         super().__init__(tensor.dtype, tensor.layout)
         self.tensor = tensor

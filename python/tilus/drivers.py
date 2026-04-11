@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import hashlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
@@ -24,6 +25,7 @@ from typing import Optional, Sequence
 import filelock
 
 import tilus.option
+import tilus.target
 from tilus.backends.codegen import generate_ir_module
 from tilus.hidet.backend.build import compile_source
 from tilus.hidet.backend.codegen import codegen
@@ -32,6 +34,8 @@ from tilus.hidet.ir.module import IRModule
 from tilus.ir.prog import Program
 from tilus.ir.tools import verify
 from tilus.runtime import CompiledProgram, compiled_program_exists, load_compiled_program
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -186,9 +190,9 @@ def optimize_ir_module(ir_module: IRModule, cache_dir: Path) -> IRModule:
     ]
 
     instruments: list[PassInstrument] = []
+    instruments.append(ProfileInstrument(str(cache_dir / "module" / "ir" / "lower_time.txt")))
     if tilus.option.get_option("debug.dump_ir"):
         instruments.append(SaveIRInstrument(str(cache_dir / "module" / "ir")))
-        instruments.append(ProfileInstrument(str(cache_dir / "module" / "ir" / "lower_time.txt")))
 
     with PassContext(instruments):
         return lower_with(ir_module, transforms)
@@ -267,12 +271,18 @@ def build_ir_module(ir_module: IRModule, output_dir: str) -> str:
     """
     output_path = Path(output_dir)
 
+    import time as _time
+
     # 1. optimize the low-level IR
+    _t0 = _time.time()
     ir_module = optimize_ir_module(ir_module, output_path)
+    logger.info("Hidet IR optimization: %.3fs", _time.time() - _t0)
 
     # 2. generate the low-level code (CUDA C)
+    _t0 = _time.time()
     src_path = output_path / "source.cu"
     codegen(ir_module, src_out_path=str(src_path), target="cuda")
+    logger.info("CUDA codegen: %.3fs", _time.time() - _t0)
 
     # 3. save the function types to func_types.pickle
     write_function_types(ir_module=ir_module, output_dir=output_dir)
@@ -320,15 +330,23 @@ def build_program(prog: Program, options: Optional[BuildOptions] = None) -> str:
         # 0. verify the program
         verify(prog)
 
+        import time as _time
+
         # 1. optimize the program (tilus-level passes)
+        _t0 = _time.time()
         prog = optimize_program(prog, options=options, cache_dir=cache_dir)
+        logger.info("Tilus IR optimization: %.3fs", _time.time() - _t0)
 
         # 2. generate the low-level IR (Hidet IR)
+        _t0 = _time.time()
         ir_module: IRModule = generate_ir_module(prog)
+        logger.info("Hidet IR generation: %.3fs", _time.time() - _t0)
 
         # 3-6. optimize, codegen, and compile the low-level IR
+        _t0 = _time.time()
         module_dir = cache_dir / "module"
         build_ir_module(ir_module, str(module_dir))
+        logger.info("Hidet IR build: %.3fs", _time.time() - _t0)
 
     return str(cache_dir)
 

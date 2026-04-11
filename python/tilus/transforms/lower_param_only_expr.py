@@ -81,6 +81,13 @@ class LowerParamOnlyExprRewriter(IRRewriter):
         self.params = func.params
         body = self.visit(func.body)
         num_blocks = func.metadata.grid_blocks
+        if len(num_blocks) != 3:
+            # py_class stores tuples as tvm_ffi.Array; convert back to tuple and pad if needed
+            num_blocks = tuple(num_blocks)
+            while len(num_blocks) < 3:
+                from tilus.hidet.ir.dtypes import int32
+
+                num_blocks = num_blocks + (int32.one,)
         num_blocks = (
             self.lower_param_only_param(num_blocks[0]),
             self.lower_param_only_param(num_blocks[1]),

@@ -26,6 +26,8 @@
 from enum import Enum
 from typing import Type, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import (
     Add,
     Address,
@@ -403,7 +405,9 @@ class TypeInfer(IRFunctor):
 
     def visit_CallOp(self, call: CallOp):
         arg_types = [
-            (self.visit(arg) if arg is not None else void) for arg in call.op.args if not isinstance(arg, (tuple, list))
+            (self.visit(arg) if arg is not None else void)
+            for arg in call.op.args
+            if not isinstance(arg, (tuple, list, tvm_ffi.Array))
         ]
         return call.op.infer_type(arg_types)
 

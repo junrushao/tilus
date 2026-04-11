@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
 from tilus.hidet.ir.stmt import asm
@@ -23,7 +21,6 @@ from tilus.hidet.utils import initialize
 
 @initialize()
 def register_mbarrier_primitives():
-    @no_type_check
     @script
     def cuda_fence_mbarrier_init_cluster():
         attrs.func_kind = "cuda_internal"
@@ -34,7 +31,6 @@ def register_mbarrier_primitives():
         func_name = "cuda_fence_proxy_async_{}".format(space)
         inst = "fence.proxy.async.{};".format(ptx_space)
 
-        @no_type_check
         @script
         def cuda_fence_proxy_async():
             attrs.func_kind = "cuda_internal"
@@ -43,7 +39,6 @@ def register_mbarrier_primitives():
 
         register_primitive_function(name=func_name, func_or_type=cuda_fence_proxy_async)
 
-    @no_type_check
     @script
     def cuda_fence_proxy_async_generic_release_shared():
         attrs.func_kind = "cuda_internal"

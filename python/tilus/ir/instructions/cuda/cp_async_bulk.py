@@ -14,18 +14,19 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, as_expr
 from tilus.ir.inst import Instruction
 from tilus.ir.tensor import GlobalTensor, SharedTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkGlobalToSharedInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: tuple[int, ...]
+    dims: Optional[tuple[int, ...]]
     mbarrier: Expr
     evict: Optional[str]
     check_bounds: bool = True
@@ -52,10 +53,10 @@ class CopyAsyncBulkGlobalToSharedInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkGlobalToClusterSharedInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: tuple[int, ...]
+    dims: Optional[tuple[int, ...]]
     mbarrier: Expr
     cta_mask: int
     evict: Optional[str]
@@ -85,10 +86,10 @@ class CopyAsyncBulkGlobalToClusterSharedInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkSharedToGlobalInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: tuple[int, ...]
+    dims: Optional[tuple[int, ...]]
     check_bounds: bool = True
     l2_evict: Optional[str] = "evict_first"
 
@@ -112,7 +113,7 @@ class CopyAsyncBulkSharedToGlobalInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkSharedToClusterSharedInst(Instruction):
     mbarrier: Expr
     remote_rank: int
@@ -132,12 +133,12 @@ class CopyAsyncBulkSharedToClusterSharedInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkCommitGroupInst(Instruction):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncBulkWaitGroupInst(Instruction):
     n: int
 

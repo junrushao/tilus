@@ -26,6 +26,7 @@
 # limitations under the License.
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+import tvm_ffi
 from lark import Lark, Token, Tree, Visitor
 
 from tilus.hidet.ir.expr import (
@@ -77,6 +78,8 @@ from tilus.hidet.ir.layout import (
     RowMajorLayout,
     StridesLayout,
     SwizzleLayout,
+    column_major,
+    row_major,
 )
 from tilus.hidet.ir.mapping import ComposedTaskMapping, RepeatTaskMapping, SpatialTaskMapping
 from tilus.hidet.ir.module import IRModule
@@ -161,12 +164,12 @@ class IRDumper(IRFunctor):
             raise ValueError("Attribute dict with name {} already exists".format(name))
 
         def check_attr(d):
-            if isinstance(d, dict):
+            if isinstance(d, (dict, tvm_ffi.Map)):
                 for k, v in d.items():
                     if not isinstance(k, str):
                         raise ValueError("Attribute dict must have key of string, but got {}".format(type(k)))
                     check_attr(v)
-            elif isinstance(d, (list, tuple)):
+            elif isinstance(d, (list, tuple, tvm_ffi.Array)):
                 for it in d:
                     check_attr(it)
             elif isinstance(d, (int, float, str, bool, Constant, Expr)):
@@ -176,16 +179,16 @@ class IRDumper(IRFunctor):
             else:
                 raise ValueError("Unexpected type {} in attribute dict".format(type(d)))
 
-        if not isinstance(d, dict):
+        if not isinstance(d, (dict, tvm_ffi.Map)):
             raise ValueError("Attribute dict must be a dict, but got {}".format(type(d)))
         check_attr(d)
 
         self.attr_table[name] = d
 
         def format_str(d):
-            if isinstance(d, dict):
+            if isinstance(d, (dict, tvm_ffi.Map)):
                 return "dict(" + ", ".join([format_str(k) + ": " + format_str(v) for k, v in d.items()]) + ")"
-            elif isinstance(d, (list, tuple)):
+            elif isinstance(d, (list, tuple, tvm_ffi.Array)):
                 return "list(" + ", ".join([format_str(it) for it in d]) + ")"
             elif isinstance(d, str):
                 return '"{}"'.format(d)
@@ -228,10 +231,10 @@ class IRDumper(IRFunctor):
                 if k not in d2:
                     return False
                 v1 = d2[k]
-                if isinstance(v0, dict):
+                if isinstance(v0, (dict, tvm_ffi.Map)):
                     if not dict_equal(v0, v1):
                         return False
-                elif isinstance(v0, (list, tuple)):
+                elif isinstance(v0, (list, tuple, tvm_ffi.Array)):
                     if not same_list(v0, v1):
                         return False
                 elif isinstance(v0, Node) or isinstance(v1, Node):
@@ -790,7 +793,7 @@ def preprocess_symbolvar(tree: Tree):
 def construct_global_symbols(tree: Tree) -> Dict[str, SymbolVar]:
     symbols = {}
     svars = preprocess_symbolvar(tree)
-    assert isinstance(svars, dict), "failed to get symbol vars"
+    assert isinstance(svars, (dict, tvm_ffi.Map)), "failed to get symbol vars"
     for k, v in svars.items():
         symbols[k] = symbol_var(k, v)
     return symbols
@@ -1141,7 +1144,7 @@ class ParseTreeVisitor:
         else:
             exprs = [v] + [self(v) for v in node[1:-1]]
         template_str = str(node[-1])
-        return BlackBoxStmt(template_str, *exprs)
+        return BlackBoxStmt(template_string=template_str, exprs=exprs)
 
     def visit_asm_label(self, node):
         return self(node[0]), self(node[1])
@@ -1156,7 +1159,7 @@ class ParseTreeVisitor:
         outputs = outputs if outputs is not None else []
         inputs = self(node[3])
         inputs = inputs if inputs is not None else []
-        return AsmStmt(template_str, outputs, inputs, volatile)
+        return AsmStmt.from_pairs(template_str, outputs, inputs, volatile)
 
     def visit_dim3(self, node):
         return (self(node[0]), self(node[1]), self(node[2]))
@@ -1168,7 +1171,15 @@ class ParseTreeVisitor:
         shared_smem = self(node[3])
 
         args = [self(v) for v in node[4:]]
-        return LaunchKernelStmt(fn_var, args, grid_dim, (1,), block_dim, shared_smem, None)
+        return LaunchKernelStmt(
+            func_var=fn_var,
+            args=args,
+            grid_dim=grid_dim,
+            cluster_dim=(1,),
+            block_dim=block_dim,
+            shared_mem_bytes=shared_smem,
+            target=None,
+        )
 
     def visit_let_expr(self, node):
         return Let(self(node[0]), self(node[1]), self(node[2]))
@@ -1216,19 +1227,49 @@ class ComputeFunctionVariables(ParseTreeVisitor):
         return ForStmtAttr(d["unroll"], d["factor"], d["explicit"], d["parallel"], d["threads"])
 
     def visit_fn_name(self, node):
+        def _make_composed_task_mapping(*args, **kwargs):
+            if len(args) == 2 and not kwargs:
+                return ComposedTaskMapping(outer=args[0], inner=args[1])
+            return ComposedTaskMapping(*args, **kwargs)
+
+        def _make_repeat_task_mapping(*args, **kwargs):
+            return RepeatTaskMapping(**kwargs) if not args else RepeatTaskMapping(*args, **kwargs)
+
+        def _make_spatial_task_mapping(*args, **kwargs):
+            return SpatialTaskMapping(**kwargs) if not args else SpatialTaskMapping(*args, **kwargs)
+
         name_to_taskmap = {
-            "compose_map": ComposedTaskMapping,
-            "repeat_map": RepeatTaskMapping,
-            "spatial_map": SpatialTaskMapping,
+            "compose_map": _make_composed_task_mapping,
+            "repeat_map": _make_repeat_task_mapping,
+            "spatial_map": _make_spatial_task_mapping,
         }
+
+        def _make_row(shape):
+            return row_major(*shape)
+
+        def _make_column(shape):
+            return column_major(*shape)
+
+        def _make_strides(shape, strides):
+            return StridesLayout(shape=shape, strides=strides)
+
+        def _make_local(shape):
+            return LocalLayout(shape=shape)
+
+        def _make_compose(outer, inner):
+            return ComposedLayout(outer=outer, inner=inner)
+
+        def _make_concat(lhs, rhs):
+            return ConcatLayout(lhs=lhs, rhs=rhs)
+
         name_to_layout = {
-            "row": RowMajorLayout,
-            "column": ColumnMajorLayout,
-            "strides": StridesLayout,
-            "swizzle": SwizzleLayout,
-            "local": LocalLayout,
-            "compose": ComposedLayout,
-            "concat": ConcatLayout,
+            "row": _make_row,
+            "column": _make_column,
+            "strides": _make_strides,
+            "swizzle": lambda base, **kw: SwizzleLayout(base=base, **kw),
+            "local": _make_local,
+            "compose": _make_compose,
+            "concat": _make_concat,
         }
         # in the type definition the only functions that are called are
         # the ones above and list(...)
@@ -1238,7 +1279,7 @@ class ComputeFunctionVariables(ParseTreeVisitor):
         attr_name = self(node[1])
         if attr_name is not None:
             attr = self.construct_attribute(attr_name)
-            assert isinstance(attr, dict)
+            assert isinstance(attr, (dict, tvm_ffi.Map))
             if "fn_type" in attr:
                 fn_type = attr["fn_type"]
                 if fn_type == "TaskMapping":
@@ -1246,7 +1287,7 @@ class ComputeFunctionVariables(ParseTreeVisitor):
                         # repeat task mapping, got to reconstruct third argument
                         for_stmt_attr = attr["attrs"]
                         for_stmt_attr = [self.reconstruct_for_attr(a) for a in for_stmt_attr]
-                        return lambda *args, **kwargs: RepeatTaskMapping(*args, **kwargs, attrs=for_stmt_attr)
+                        return lambda *args, **kwargs: RepeatTaskMapping(**kwargs, attrs=for_stmt_attr)
                     return name_to_taskmap[name]
                 elif fn_type == "Layout":
                     return name_to_layout[name]
@@ -1364,26 +1405,56 @@ class IRConstructor(ParseTreeVisitor):
         return ForStmtAttr(d["unroll"], d["factor"], d["explicit"], d["parallel"], d["threads"])
 
     def visit_fn_name(self, node):
+        def _make_composed_task_mapping(*args, **kwargs):
+            if len(args) == 2 and not kwargs:
+                return ComposedTaskMapping(outer=args[0], inner=args[1])
+            return ComposedTaskMapping(*args, **kwargs)
+
+        def _make_repeat_task_mapping(*args, **kwargs):
+            return RepeatTaskMapping(**kwargs) if not args else RepeatTaskMapping(*args, **kwargs)
+
+        def _make_spatial_task_mapping(*args, **kwargs):
+            return SpatialTaskMapping(**kwargs) if not args else SpatialTaskMapping(*args, **kwargs)
+
         name_to_taskmap = {
-            "compose_map": ComposedTaskMapping,
-            "repeat_map": RepeatTaskMapping,
-            "spatial_map": SpatialTaskMapping,
+            "compose_map": _make_composed_task_mapping,
+            "repeat_map": _make_repeat_task_mapping,
+            "spatial_map": _make_spatial_task_mapping,
         }
+
+        def _make_row(shape):
+            return row_major(*shape)
+
+        def _make_column(shape):
+            return column_major(*shape)
+
+        def _make_strides(shape, strides):
+            return StridesLayout(shape=shape, strides=strides)
+
+        def _make_local(shape):
+            return LocalLayout(shape=shape)
+
+        def _make_compose(outer, inner):
+            return ComposedLayout(outer=outer, inner=inner)
+
+        def _make_concat(lhs, rhs):
+            return ConcatLayout(lhs=lhs, rhs=rhs)
+
         name_to_layout = {
-            "row": RowMajorLayout,
-            "column": ColumnMajorLayout,
-            "strides": StridesLayout,
-            "swizzle": SwizzleLayout,
-            "local": LocalLayout,
-            "compose": ComposedLayout,
-            "concat": ConcatLayout,
+            "row": _make_row,
+            "column": _make_column,
+            "strides": _make_strides,
+            "swizzle": lambda base, **kw: SwizzleLayout(base=base, **kw),
+            "local": _make_local,
+            "compose": _make_compose,
+            "concat": _make_concat,
         }
         name = str(node[0])
         attr_name = self(node[1])
         # print(type(attr), attr)
         if attr_name is not None:
             attr = self.attributes[attr_name]
-            assert isinstance(attr, dict)
+            assert isinstance(attr, (dict, tvm_ffi.Map))
             if "fn_type" in attr:
                 fn_type = attr["fn_type"]
                 if fn_type == "TaskMapping":
@@ -1391,7 +1462,7 @@ class IRConstructor(ParseTreeVisitor):
                         # repeat task mapping, got to reconstruct third argument
                         for_stmt_attr = attr["attrs"]
                         for_stmt_attr = [self.reconstruct_for_attr(a) for a in for_stmt_attr]
-                        return lambda *args, **kwargs: RepeatTaskMapping(*args, **kwargs, attrs=for_stmt_attr)
+                        return lambda *args, **kwargs: RepeatTaskMapping(**kwargs, attrs=for_stmt_attr)
                     return name_to_taskmap[name]
                 elif fn_type == "Layout":
                     return name_to_layout[name]

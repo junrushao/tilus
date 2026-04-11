@@ -24,6 +24,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tvm_ffi
+
 from tilus.hidet.ir.functors import IRVisitor
 
 
@@ -43,7 +45,7 @@ class IRCollector(IRVisitor):
         pass
 
     def visit(self, node):
-        key = id(node) if isinstance(node, (list, dict)) else node
+        key = id(node) if isinstance(node, (list, dict, tvm_ffi.Array, tvm_ffi.Map)) else node
         if key in self.memo:
             return self.memo[key]
 
@@ -74,12 +76,12 @@ def collect(node, node_types, stop_when_found=False) -> list:
         The collected nodes.
 
     """
-    if not isinstance(node_types, tuple):
-        if isinstance(node_types, list):
+    if not isinstance(node_types, (tuple, tvm_ffi.Array)):
+        if isinstance(node_types, (list, tvm_ffi.Array)):
             node_types = tuple(node_types)
         else:
             node_types = (node_types,)
-    if isinstance(node, list):
+    if isinstance(node, (list, tvm_ffi.Array)):
         node = tuple(node)
 
     collector = IRCollector(node_types, stop_when_found)

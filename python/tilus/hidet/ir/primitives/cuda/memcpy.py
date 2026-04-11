@@ -41,7 +41,8 @@ def memcpy_async(dst: Expr, src: Expr, count: Expr, kind: str):
         raise RuntimeError(f"Unsupported transfer from {src} to {dst}, candidate kinds are {list(kind_map.keys())}")
 
     return BlackBoxStmt(
-        f"cudaMemcpyAsync({{}}, {{}}, {{}}, {kind_map[kind]}, (cudaStream_t){{}});", dst, src, count, get_cuda_stream()
+        template_string=f"cudaMemcpyAsync({{}}, {{}}, {{}}, {kind_map[kind]}, (cudaStream_t){{}});",
+        exprs=(dst, src, count, get_cuda_stream()),
     )
 
 

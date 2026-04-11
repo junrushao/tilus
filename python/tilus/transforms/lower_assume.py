@@ -67,7 +67,7 @@ class ApplyAssumeRewriter(IRRewriter):
         if updated_func is func and not self.param2divisibility:
             return func
         else:
-            param2divisibility = updated_func.metadata.param2divisibility.copy()
+            param2divisibility = dict(updated_func.metadata.param2divisibility)
             for var in self.param2divisibility:
                 if var in param2divisibility:
                     param2divisibility[var] = gcd(param2divisibility[var], self.param2divisibility[var])

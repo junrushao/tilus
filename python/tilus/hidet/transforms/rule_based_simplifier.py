@@ -15,6 +15,8 @@
 import itertools
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir import BitwiseXor, Constant, DataType, logical_and
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Add, Expr, Var
@@ -173,7 +175,7 @@ class RuleBasedSimplifier(OriginalRuleBasedSimplifier):
 class RuleBasedSimplifyPass(FunctionPass):
     def process_func(self, func: Function) -> Function:
         simplifier = RuleBasedSimplifier(None)
-        return repeat_until_converge(simplifier, func)
+        return repeat_until_converge(simplifier, func, limit=10)
 
 
 def bound_aware_simplify(
@@ -183,7 +185,12 @@ def bound_aware_simplify(
     for var, bound in var2bound.items():
         if isinstance(bound, int):
             bound = BoundInfo(value=bound)
-        elif isinstance(bound, tuple) and len(bound) == 2 and isinstance(bound[0], int) and isinstance(bound[1], int):
+        elif (
+            isinstance(bound, (tuple, tvm_ffi.Array))
+            and len(bound) == 2
+            and isinstance(bound[0], int)
+            and isinstance(bound[1], int)
+        ):
             bound = BoundInfo(min_value=bound[0], max_value=bound[1])
         elif isinstance(bound, BoundInfo):
             pass

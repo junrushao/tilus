@@ -25,6 +25,7 @@
 # limitations under the License.
 from typing import Dict, List, Optional, Tuple
 
+import tvm_ffi
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import lookup_primitive_function, register_primitive_function
 from tilus.hidet.ir.type import DataType, FuncType, data_type
@@ -218,6 +219,15 @@ def tif_make_vector(arg_types: List[DataType]) -> DataType:
     return vectorize(arg_types[0], len(arg_types))
 
 
+def tif_returns_bool(arg_types) -> DataType:
+    return data_type("bool")
+
+
+tvm_ffi.register_global_func("tilus.type_infer.numeric_promotion", type_infer_func)
+tvm_ffi.register_global_func("tilus.type_infer.make_vector", tif_make_vector)
+tvm_ffi.register_global_func("tilus.type_infer.returns_bool", tif_returns_bool)
+
+
 class MathFunctionSetGeneric(MathFunctionSet):
     @staticmethod
     def register():
@@ -258,11 +268,11 @@ class MathFunctionSetGeneric(MathFunctionSet):
         ternary_names = ["fma"]
         for name in unary_names + binary_names + ternary_names:
             if name in ["isfinite", "isinf", "isnan"]:
-                func_type = FuncType(type_infer_func=lambda _: data_type("bool"))
+                func_type = FuncType(type_infer_func="tilus.type_infer.returns_bool")
             elif name == "make_vector":
-                func_type = FuncType(type_infer_func=tif_make_vector)
+                func_type = FuncType(type_infer_func="tilus.type_infer.make_vector")
             else:
-                func_type = FuncType(type_infer_func=type_infer_func)
+                func_type = FuncType(type_infer_func="tilus.type_infer.numeric_promotion")
             register_primitive_function(name=f"generic_{name}", codegen_name=None, func_or_type=func_type, generic=True)
 
     @staticmethod

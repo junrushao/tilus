@@ -14,16 +14,18 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.func import Function
 from tilus.ir.node import IRNode
 from tilus.ir.utils import frozendict
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Program(IRNode):
-    functions: frozendict[str, Function]
+    functions: Any
 
     @staticmethod
     def create(functions: dict[str, Function]) -> Program:

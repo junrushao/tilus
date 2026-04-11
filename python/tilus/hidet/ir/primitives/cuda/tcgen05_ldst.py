@@ -25,6 +25,8 @@
 # limitations under the License.
 from typing import Optional, Tuple, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives import is_primitive_function
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -279,8 +281,8 @@ def tcgen05_ld(
     ret: Call
         The call expression, which will be lowered to a tcgen05.ld instruction with the given parameters.
     """
-    if isinstance(shape, tuple):
-        shape = _shape_to_string(shape)
+    if isinstance(shape, (tuple, tvm_ffi.Array)):
+        shape = _shape_to_string(tuple(shape))
     if isinstance(num, int):
         num = f"x{num}"
 
@@ -383,8 +385,8 @@ def tcgen05_st(
     ret: Call
         The call expression, which will be lowered to a tcgen05.st instruction with the given parameters.
     """
-    if isinstance(shape, tuple):
-        shape = _shape_to_string(shape)
+    if isinstance(shape, (tuple, tvm_ffi.Array)):
+        shape = _shape_to_string(tuple(shape))
     if isinstance(num, int):
         num = f"x{num}"
 

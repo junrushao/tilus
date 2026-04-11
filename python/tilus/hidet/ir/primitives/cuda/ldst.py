@@ -237,7 +237,7 @@ def register_ldg():
                         extra_addr_var.append(("l", cast(addr_var, ~u32) + 4 * i))
 
                 doc = "{" + "".join(insts) + "}"
-                body = AsmStmt(
+                body = AsmStmt.from_pairs(
                     doc,
                     outputs=[("=r", deref(cast(var, PointerType(u32)))) for var in reg_vars],
                     inputs=[("l", addr_var), ("r", cast(pred_var, i32))]
@@ -295,7 +295,7 @@ def register_stg():
                     extra_addr_var.append(("l", cast(addr_var, ~u32) + 4 * i))
 
             doc = "{" + "".join(insts) + "}"
-            body = AsmStmt(
+            body = AsmStmt.from_pairs(
                 doc,
                 outputs=[],
                 inputs=[("l", addr_var), ("r", cast(pred_var, i32))]
@@ -445,7 +445,7 @@ def register_lds():
             indicator = "h" if load_bytes == 2 else "r"
 
             doc = "{" + "".join(insts) + "}"
-            body = AsmStmt(
+            body = AsmStmt.from_pairs(
                 doc,
                 outputs=[(f"={indicator}", deref(cast(var, PointerType(dtype)))) for var in reg_vars],
                 inputs=[("l", addr_var)],
@@ -494,7 +494,7 @@ def register_sts():
             indicator = "b" if store_bytes == 1 else "h" if store_bytes == 2 else "r"
 
             doc = "{" + "".join(insts) + "}"
-            body = AsmStmt(
+            body = AsmStmt.from_pairs(
                 doc,
                 outputs=[],
                 inputs=[("l", addr_var)] + [(indicator, deref(cast(var, PointerType(dtype)))) for var in reg_vars],

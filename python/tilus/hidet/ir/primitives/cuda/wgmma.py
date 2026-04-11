@@ -557,8 +557,6 @@ def make_wgmma_desc(lead_dim_offset: u64, stride_dim_offset: u64, layout_type: u
 # ---------------------------------------------------------------------------
 # wgmma_encode_smem_descriptor (from extensions)
 # ---------------------------------------------------------------------------
-from typing import no_type_check
-
 from tilus.hidet.ir.dtypes import uint8
 from tilus.hidet.ir.dtypes import uint32 as uint32_dt
 from tilus.hidet.ir.dtypes import uint64 as uint64_dt
@@ -572,7 +570,6 @@ def register_wgmma_encode_smem_descriptor():
     from tilus.hidet.lang import script as script_fn
 
     @register_primitive_function_decorator
-    @no_type_check
     @script_fn
     def wgmma_encode_smem_descriptor(
         smem_addr: uint32_dt,  # 14 bits

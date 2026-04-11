@@ -14,21 +14,23 @@
 # limitations under the License.
 from __future__ import annotations as _
 
-import dataclasses
-from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
+from tilus.ir._replace import replace
 from tilus.ir.node import IRNode
 from tilus.ir.stmt import Stmt
 from tilus.ir.utils import frozendict
 
 
-@dataclass(frozen=True, eq=False)
-class Analysis:
-    divisibility: frozendict[Var, int]
-    lower_bound: frozendict[Var, int]
-    upper_bound: frozendict[Var, int]
+@py_class
+class Analysis(tvm_ffi.Object):
+    divisibility: Any
+    lower_bound: Any
+    upper_bound: Any
 
     @staticmethod
     def create(
@@ -41,13 +43,13 @@ class Analysis:
         return Analysis(frozendict(), frozendict(), frozendict())
 
 
-@dataclass(frozen=True)
-class Metadata:
-    grid_blocks: tuple[Expr, Expr, Expr]  # expressions over function params
-    cluster_blocks: tuple[int, int, int]
-    block_indices: tuple[Var, Var, Var]
+@py_class
+class Metadata(tvm_ffi.Object):
+    grid_blocks: Any  # tuple[Expr | int, ...]; may contain unsimplified ints
+    cluster_blocks: tuple[int, ...]
+    block_indices: tuple[Var, ...]
     num_warps: int
-    param2divisibility: frozendict[Var, int]
+    param2divisibility: Any  # frozendict[Var, int]
     analysis: Optional[Analysis]
 
     @staticmethod
@@ -71,16 +73,16 @@ class Metadata:
         )
 
     def with_analysis(self, analysis: Optional[Analysis]) -> Metadata:
-        return dataclasses.replace(self, analysis=analysis)
+        return replace(self, analysis=analysis)
 
     def with_grid_blocks(self, grid_blocks: tuple[Expr, Expr, Expr]) -> Metadata:
-        return dataclasses.replace(self, grid_blocks=grid_blocks)
+        return replace(self, grid_blocks=grid_blocks)
 
     def with_param2divisibility(self, divisibility: Mapping[Var, int]) -> Metadata:
-        return dataclasses.replace(self, param2divisibility=frozendict(divisibility))
+        return replace(self, param2divisibility=frozendict(divisibility))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Function(IRNode):
     name: str
     params: tuple[Var, ...]
@@ -102,10 +104,10 @@ class Function(IRNode):
         )
 
     def with_body(self, new_body: Stmt) -> Function:
-        return dataclasses.replace(self, body=new_body)
+        return replace(self, body=new_body)
 
     def with_name(self, new_name: str) -> Function:
-        return dataclasses.replace(self, name=new_name)
+        return replace(self, name=new_name)
 
     def with_metadata(self, new_metadata: Metadata) -> Function:
-        return dataclasses.replace(self, metadata=new_metadata)
+        return replace(self, metadata=new_metadata)

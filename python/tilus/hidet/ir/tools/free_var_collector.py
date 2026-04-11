@@ -25,6 +25,8 @@
 # limitations under the License.
 from typing import Sequence, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import Expr, Var
 
 try:
@@ -97,7 +99,7 @@ class FreeVarCollector(IRVisitor):
 
 
 def collect_free_vars(node: Union[Expr, Stmt, Sequence[Union[Expr, Stmt]]]):
-    if not isinstance(node, (list, tuple)):
+    if not isinstance(node, (list, tuple, tvm_ffi.Array)):
         node = [node]
     collector = FreeVarCollector()
     for n in node:

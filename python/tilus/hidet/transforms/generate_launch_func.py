@@ -71,12 +71,12 @@ def add_launch_func(ir_module: IRModule, kernel_func: Function):
             with fb.if_then(shared_memory_bytes > 48 * 1024):
                 fb += set_kernel_max_dynamic_smem_bytes(func_var, shared_memory_bytes)
             fb += LaunchKernelStmt(
-                func_var,
-                params,
+                func_var=func_var,
+                args=params,
                 grid_dim=rewrite(_normalize_dim3(kernel_func.get_attr("cuda.grid_dim")), param_remap),
                 cluster_dim=rewrite(_normalize_dim3(kernel_func.get_attr("cuda.cluster_dim", default=1)), param_remap),
                 block_dim=rewrite(_normalize_dim3(kernel_func.get_attr("cuda.block_dim")), param_remap),
-                shared_mem=shared_memory_bytes,
+                shared_mem_bytes=shared_memory_bytes,
                 target="cuda",
             )
         elif kernel_func.kind == "hip_kernel":
@@ -85,12 +85,12 @@ def add_launch_func(ir_module: IRModule, kernel_func: Function):
             )
 
             fb += LaunchKernelStmt(
-                func_var,
-                params,
+                func_var=func_var,
+                args=params,
                 grid_dim=rewrite(_normalize_dim3(kernel_func.get_attr("hip.grid_dim")), param_remap),
                 cluster_dim=(int32.one, int32.one, int32.one),
                 block_dim=rewrite(_normalize_dim3(kernel_func.get_attr("hip.block_dim")), param_remap),
-                shared_mem=shared_memory_bytes,
+                shared_mem_bytes=shared_memory_bytes,
                 target="hip",
             )
         elif kernel_func.kind == "cpu_kernel":

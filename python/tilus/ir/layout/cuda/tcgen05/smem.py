@@ -14,15 +14,16 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Optional, Sequence, cast
+from typing import Any, Literal, Optional, Sequence, cast
 
 import numpy as np
+import tvm_ffi
 from tilus.hidet.ir.primitives.cuda.tcgen05 import Tcgen05SwizzleMode
 from tilus.hidet.ir.type import DataType
 from tilus.ir.layout.shared_layout import SharedLayout
 from tilus.ir.layout.utils.cute import CuteLayout, CuteSwizzle, IntTuple, SwizzledCuteLayout, cute_layout, tuple_product
 from tilus.utils import floor_log2
+from tvm_ffi.dataclasses import py_class
 
 # class Tcgen05SwizzleMode(Enum):
 #     """TCGen05 swizzle modes corresponding to cute Swizzle parameters"""
@@ -71,8 +72,8 @@ def as_cute_swizzle(swizzle_mode: Tcgen05SwizzleMode) -> CuteSwizzle:
         raise ValueError(f"Unsupported swizzle mode: {swizzle_mode}")
 
 
-@dataclass(order=True, eq=True, unsafe_hash=True)
-class CanonicalSharedLayout:
+@py_class(eq=True, order=True, unsafe_hash=True)
+class CanonicalSharedLayout(tvm_ffi.Object):
     """
     The canonical layout of tcgen05 cp instructions.
 
@@ -104,8 +105,8 @@ class CanonicalSharedLayout:
     (The table is a generalization of the table in https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-canonical-layouts.)
     """
 
-    major_kind: Literal["MN", "K"]
-    swizzle_mode: Tcgen05SwizzleMode
+    major_kind: str
+    swizzle_mode: Any  # Tcgen05SwizzleMode (Enum, not FFI-registered)
     SBO: int
     LBO: int
     m: int

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, no_type_check
+from typing import Optional
 
 from tilus.hidet.ir.dtypes import int32, uint16, uint32
 from tilus.hidet.ir.expr import Expr
@@ -65,7 +65,6 @@ def register_bulk_copy_async():
             template_string = "cp.async.bulk.shared::cta.global.mbarrier::complete_tx::bytes [%0], [%1], %2, [%3];"
         func_name = "cuda_" + func_name
 
-        @no_type_check
         @script
         def cuda_cp_async(dst: uint32, src: void_p, size: int32, mbarrier: uint32):
             attrs.func_name = func_name
@@ -90,7 +89,6 @@ def register_bulk_copy_async():
             template_string = "cp.async.bulk.shared::cluster.global.mbarrier::complete_tx::bytes.multicast::cluster [%0], [%1], %2, [%3], %4;"
         func_name = "cuda_" + func_name
 
-        @no_type_check
         @script
         def cuda_cp_async(dst: uint32, src: void_p, size: int32, mbarrier: uint32, cta_mask: uint16):
             attrs.func_name = func_name
@@ -130,7 +128,6 @@ def register_bulk_copy_async():
             func_name = "cuda_" + func_name
             if not cp_mask:
 
-                @no_type_check
                 @script
                 def cuda_cp_async(dst: void_p, src: uint32, size: int32):
                     attrs.func_name = func_name
@@ -139,7 +136,6 @@ def register_bulk_copy_async():
                     asm(template=template_string, inputs=inputs, is_volatile=True, memory_fence=True)
             else:
 
-                @no_type_check
                 @script
                 def cuda_cp_async(dst: void_p, src: uint32, size: int32, byte_mask: uint32):
                     attrs.func_name = func_name
@@ -153,8 +149,7 @@ def register_bulk_copy_async():
     # cp_async_shared_to_cluster_shared
     func_name = "cuda_cp_async_bulk_cluster_shared_shared"
 
-    @no_type_check  # type: ignore[no-redef]
-    @script
+    @script  # type: ignore[no-redef]
     def cuda_cp_async(dst: uint32, src: uint32, size: int32, mbarrier: uint32):
         attrs.func_name = func_name
         attrs.func_kind = "cuda_internal"

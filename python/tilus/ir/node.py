@@ -12,20 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 
-@dataclass(frozen=True, eq=False)
-class IRNode:
+@py_class
+class IRNode(tvm_ffi.Object):
     def __str__(self):
         from tilus.ir.tools.printer import PrintContext
 
         printer = PrintContext.current()
 
         return str(printer(self))
-
-    def __hash__(self):
-        return id(self)
-
-    def __eq__(self, other):
-        return self is other

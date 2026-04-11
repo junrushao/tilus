@@ -20,6 +20,8 @@ Removes functional instructions whose output tensors are never consumed by any o
 
 from typing import Type
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import Expr, Var
 from tilus.hidet.ir.tools import collect as hidet_collect
 from tilus.ir.func import Function
@@ -118,14 +120,14 @@ class UsedTensorCollector(IRVisitor):
 
     def __init__(self) -> None:
         super().__init__()
-        self.used_tensors: set[int] = set()  # set of id(tensor)
+        self.used_tensors: set[int] = set()  # set of hash(tensor) — handle-based
         self.functional_insts: list[Instruction] = []
         # Deferred: TensorItem stmts whose liveness depends on Var usage
         self.tensor_item_stmts: list[TensorItemValueStmt | TensorItemPtrStmt] = []
         # All Vars referenced in expressions (collected after traversal).
         # We skip visiting the defining Var in visit_TensorItemValueStmt/PtrStmt,
         # so a Var only appears here if it's referenced elsewhere.
-        self.expr_vars: set[int] = set()  # set of id(Var)
+        self.expr_vars: set[int] = set()  # set of hash(Var) — handle-based
 
     def visit_Instruction(self, inst: Instruction) -> None:
         if _is_functional(inst):
@@ -133,7 +135,7 @@ class UsedTensorCollector(IRVisitor):
         else:
             # Side-effecting: all inputs are unconditionally used
             for tensor in inst.inputs:
-                self.used_tensors.add(id(tensor))
+                self.used_tensors.add(hash(tensor))
         # Collect Vars from all Expr-typed attributes so that TensorItemValueStmt
         # vars referenced in instruction attributes are tracked.
         for value in inst.attributes.values():
@@ -143,8 +145,8 @@ class UsedTensorCollector(IRVisitor):
         """Recursively collect Vars from Expr-typed values (including inside tuples/lists)."""
         if isinstance(value, Expr):
             for var in hidet_collect(value, Var):
-                self.expr_vars.add(id(var))
-        elif isinstance(value, (tuple, list)):
+                self.expr_vars.add(hash(var))
+        elif isinstance(value, (tuple, list, tvm_ffi.Array)):
             for item in value:
                 self._collect_expr_vars(item)
 
@@ -162,11 +164,11 @@ class UsedTensorCollector(IRVisitor):
     def visit_Expr(self, expr: Expr) -> None:
         # Collect all Vars referenced in Hidet expressions.
         for var in hidet_collect(expr, Var):
-            self.expr_vars.add(id(var))
+            self.expr_vars.add(hash(var))
 
     def _mark_used(self, tensor: Tensor) -> bool:
         """Mark a tensor as used. Returns True if it was newly added."""
-        tid = id(tensor)
+        tid = hash(tensor)
         if tid not in self.used_tensors:
             self.used_tensors.add(tid)
             return True
@@ -177,15 +179,15 @@ class UsedTensorCollector(IRVisitor):
         # Mark tensors from TensorItem stmts whose bound Var is referenced
         for stmt in self.tensor_item_stmts:
             bound_var = stmt.var if isinstance(stmt, TensorItemValueStmt) else stmt.ptr_var
-            if id(bound_var) in self.expr_vars:
-                self.used_tensors.add(id(stmt.tensor))
+            if hash(bound_var) in self.expr_vars:
+                self.used_tensors.add(hash(stmt.tensor))
 
         # Propagate through functional instruction chains
         changed = True
         while changed:
             changed = False
             for inst in self.functional_insts:
-                if inst.output is not None and id(inst.output) in self.used_tensors:
+                if inst.output is not None and hash(inst.output) in self.used_tensors:
                     for tensor in inst.inputs:
                         if self._mark_used(tensor):
                             changed = True
@@ -199,17 +201,17 @@ class DeadCodeEliminator(IRRewriter):
         self.used_tensors = used_tensors
 
     def visit_Instruction(self, inst: Instruction) -> Instruction | None:
-        if _is_functional(inst) and inst.output is not None and id(inst.output) not in self.used_tensors:
+        if _is_functional(inst) and inst.output is not None and hash(inst.output) not in self.used_tensors:
             return None
         return super().visit_Instruction(inst)
 
     def visit_TensorItemValueStmt(self, stmt: TensorItemValueStmt) -> Stmt:
-        if id(stmt.tensor) not in self.used_tensors:
+        if hash(stmt.tensor) not in self.used_tensors:
             return SeqStmt(())
         return super().visit_TensorItemValueStmt(stmt)
 
     def visit_TensorItemPtrStmt(self, stmt: TensorItemPtrStmt) -> Stmt:
-        if id(stmt.tensor) not in self.used_tensors:
+        if hash(stmt.tensor) not in self.used_tensors:
             return SeqStmt(())
         return super().visit_TensorItemPtrStmt(stmt)
 
@@ -223,9 +225,9 @@ class DeadCodeEliminationPass(Pass):
 
         # Check if there's anything to eliminate
         has_dead = any(
-            inst.output is not None and id(inst.output) not in collector.used_tensors
+            inst.output is not None and hash(inst.output) not in collector.used_tensors
             for inst in collector.functional_insts
-        ) or any(id(stmt.tensor) not in collector.used_tensors for stmt in collector.tensor_item_stmts)
+        ) or any(hash(stmt.tensor) not in collector.used_tensors for stmt in collector.tensor_item_stmts)
 
         if not has_dead:
             return function

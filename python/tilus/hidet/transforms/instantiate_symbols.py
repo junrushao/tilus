@@ -53,17 +53,21 @@ class InstantiateSymbolsRewriter(IRRewriter):
     def visit_IRModule(self, module: IRModule):
         updated_module = module.copy().reset_funcs()
         # add the global variables (that are not the function variable) to the updated module
-        updated_module.global_vars.update(
+        gvars = dict(updated_module.global_vars)
+        gvars.update(
             {name: global_var for name, global_var in module.global_vars.items() if name not in module.functions}
         )
+        updated_module.global_vars = gvars
         call_graph = CallGraph(module, allow_missing=True)
         self.ir_module = updated_module
 
         # update the function in the reversed order of the call graph, from callee to caller
+        funcs = dict(updated_module.functions)
         for node in call_graph.reversed_order:
-            updated_module.functions[node.func.name] = self.visit(node.func)
+            funcs[node.func.name] = self.visit(node.func)
             # use a new memo for each function, in case there are some expressions are used in multiple functions
             self.memo.clear()
+        updated_module.functions = funcs
 
         return updated_module
 
@@ -146,9 +150,11 @@ class InstantiateSymbolsRewriter(IRRewriter):
 
         callee_func_symbols: FuncSymbols = self.func_symbols[stmt.func_var.name]
         caller_func_symbols: FuncSymbols = self.func_symbols[self.current_func]
+        args = list(stmt.args)
         for callee_used_symbol in callee_func_symbols.symbols:
             assert callee_used_symbol in caller_func_symbols.symbol2param
-            stmt.args.append(caller_func_symbols.symbol2param[callee_used_symbol])
+            args.append(caller_func_symbols.symbol2param[callee_used_symbol])
+        stmt.args = args
         # update the function variable since the function type has changed.
         stmt.func_var = self.ir_module.lookup_var(stmt.func_var.name)
         return stmt

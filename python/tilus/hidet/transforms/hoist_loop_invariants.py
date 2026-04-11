@@ -215,7 +215,11 @@ class HoistLoopInvariantsRewriter(IRRewriter):
             for var, value in hash2var.items():
                 bind_vars.append(value)
                 bind_values.append(hash2value[var])
-            with sb.lets(bind_vars, bind_values):
+            if bind_vars:
+                with sb.lets(bind_vars, bind_values):
+                    with sb.for_loop(stmt.loop_var, stmt.extent, str(stmt.attr)):
+                        sb += body
+            else:
                 with sb.for_loop(stmt.loop_var, stmt.extent, str(stmt.attr)):
                     sb += body
             return sb.finish()

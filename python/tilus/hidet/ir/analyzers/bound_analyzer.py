@@ -29,6 +29,8 @@ import operator
 from collections import defaultdict
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import Add, Constant, Div, Expr, FloorDiv, Mod, Multiply, Sub, Var
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.functors import ExprVisitor, ModuleVisitor, StmtVisitor
@@ -206,7 +208,7 @@ Int = Union[int, Expr]
 
 
 def normalize_launch_dims(dims: Union[Int, Sequence[Int]]) -> List[Union[Expr, int]]:
-    if isinstance(dims, (list, tuple)):
+    if isinstance(dims, (list, tuple, tvm_ffi.Array)):
         dims = list(dims)
         while len(dims) < 3:
             dims = dims + [1]

@@ -26,7 +26,10 @@
 from __future__ import annotations
 
 import enum
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, ClassVar, List, Optional, Sequence, Tuple, Union
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Constant, Expr, Var, convert
 from tilus.hidet.ir.node import Node
@@ -75,13 +78,13 @@ class DeclareScope(enum.Enum):
         return not self.is_register()
 
 
-class ForStmtAttr:
-    def __init__(self, unroll=False, unroll_factor=None, unroll_explicit=False, parallel=False, parallel_threads=None):
-        self.unroll: bool = unroll
-        self.unroll_factor: Optional[int] = unroll_factor
-        self.unroll_explicit: bool = unroll_explicit
-        self.parallel: bool = parallel
-        self.parallel_threads: Optional[int] = parallel_threads
+@py_class
+class ForStmtAttr(tvm_ffi.Object):
+    unroll: bool = False
+    unroll_factor: Any = None
+    unroll_explicit: bool = False
+    parallel: bool = False
+    parallel_threads: Any = None
 
     def __str__(self):
         if self.unroll:
@@ -201,175 +204,207 @@ class ForStmtAttr:
         return attrs
 
 
+@py_class
 class Stmt(Node):
     pass
 
 
+@py_class
 class EvaluateStmt(Stmt):
-    def __init__(self, expr):
-        super().__init__()
-        self.expr: Expr = convert(expr)
+    expr: Any
+
+    def __post_init__(self):
+        self.expr = convert(self.expr)
 
 
+@py_class
 class DeclareStmt(Stmt):
-    def __init__(self, var, init: Optional[Expr] = None, is_static=False, scope: Optional[DeclareScope] = None):
-        super().__init__()
-        assert isinstance(var, Var)
-        self.var: Var = var
-        self.init: Optional[Expr] = convert(init)
-        self.is_static: bool = is_static
-        self.scope: Optional[DeclareScope] = scope if scope else DeclareScope.Default
+    var: Any
+    init: Any = None
+    is_static: bool = False
+    scope: Any = None
+
+    def __post_init__(self):
+        assert isinstance(self.var, Var)
+        self.init = convert(self.init)
+        self.scope = self.scope if self.scope else DeclareScope.Default
 
 
+@py_class
 class BufferStoreStmt(Stmt):
-    def __init__(self, buf, indices, value, protected=False):
-        super().__init__()
-        assert isinstance(indices, (list, tuple)), type(indices)
-        self.buf: Union[Var, TensorNode] = buf
-        self.indices = convert(indices)
-        self.value = convert(value)
-        self.protected = protected
+    buf: Any
+    indices: Any
+    value: Any
+    protected: bool = False
+
+    def __post_init__(self):
+        assert isinstance(self.indices, (list, tuple, tvm_ffi.Array)), type(self.indices)
+        self.indices = convert(self.indices)
+        self.value = convert(self.value)
 
 
+@py_class
 class AssignStmt(Stmt):
-    def __init__(self, var, value):
-        super().__init__()
-        assert isinstance(var, Var)
-        self.var: Var = var
-        self.value: Expr = convert(value)
+    var: Any
+    value: Any
+
+    def __post_init__(self):
+        assert isinstance(self.var, Var)
+        self.value = convert(self.value)
 
 
+@py_class
 class ReturnStmt(Stmt):
-    def __init__(self, ret_value: Optional[Expr] = None):
-        super().__init__()
-        self.ret_value: Optional[Expr] = ret_value
+    ret_value: Any = None
 
 
+@py_class
 class LetStmt(Stmt):
-    def __init__(self, bind_vars, bind_values, body=None):
-        if not isinstance(bind_vars, (list, tuple)):
-            bind_vars = [bind_vars]
-        if not isinstance(bind_values, (list, tuple)):
-            bind_values = [bind_values]
-        assert len(bind_vars) == len(bind_values)
-        assert len(bind_vars) > 0
-        bind_values = [convert(bind_value) for bind_value in bind_values]
-        self.bind_vars: List[Var] = bind_vars
-        self.bind_values: List[Expr] = bind_values
-        self.body: Optional[Stmt] = body
+    bind_vars: Any
+    bind_values: Any
+    body: Any = None
+
+    def __post_init__(self):
+        if not isinstance(self.bind_vars, (list, tuple, tvm_ffi.Array)):
+            self.bind_vars = [self.bind_vars]
+        if not isinstance(self.bind_values, (list, tuple, tvm_ffi.Array)):
+            self.bind_values = [self.bind_values]
+        assert len(self.bind_vars) == len(self.bind_values)
+        assert len(self.bind_vars) > 0
+        self.bind_values = [convert(bind_value) for bind_value in self.bind_values]
 
 
+@py_class
 class ForStmt(Stmt):
-    DEFAULT_UNROLL_LIMIT = 32
+    DEFAULT_UNROLL_LIMIT: ClassVar[int] = 32
 
-    def __init__(self, loop_var, extent, body=None, *, attr: Optional[ForStmtAttr] = None):
+    loop_var: Any
+    extent: Any
+    body: Any = None
+    attr: Any = None
+
+    def __post_init__(self):
         from tilus.hidet.ir.tools import simplify  # pylint: disable=import-outside-toplevel
 
-        super().__init__()
-        self.loop_var: Var = loop_var
-        self.extent: Expr = simplify(convert(extent))
-        self.body: Optional[Stmt] = body
-        self.attr: ForStmtAttr = attr if attr else ForStmtAttr.from_extent(extent)
+        if not self.attr:
+            self.attr = ForStmtAttr.from_extent(self.extent)
+        self.extent = simplify(convert(self.extent))
 
 
+@py_class
 class ForMappingStmt(Stmt):
-    def __init__(self, loop_vars: Sequence[Var], mapping: TaskMapping, worker: Expr, body: Stmt):
-        self.loop_vars: List[Var] = list(loop_vars)
-        self.mapping: TaskMapping = mapping
-        self.worker: Expr = worker
-        self.body: Stmt = body
+    loop_vars: Any
+    mapping: Any
+    worker: Any
+    body: Any
+
+    def __post_init__(self):
+        self.loop_vars = list(self.loop_vars)
 
 
+@py_class
 class WhileStmt(Stmt):
-    def __init__(self, cond: Expr, body: Stmt):
-        self.cond: Expr = cond
-        self.body: Stmt = body
+    cond: Any
+    body: Any
 
 
+@py_class
 class BreakStmt(Stmt):
     pass
 
 
+@py_class
 class ContinueStmt(Stmt):
     pass
 
 
+@py_class
 class IfStmt(Stmt):
-    def __init__(self, cond: Expr, then_body=None, else_body=None):
-        super().__init__()
-        self.cond: Expr = convert(cond)
-        self.then_body: Optional[Stmt] = then_body
-        self.else_body: Optional[Stmt] = else_body
+    cond: Any
+    then_body: Any = None
+    else_body: Any = None
+
+    def __post_init__(self):
+        self.cond = convert(self.cond)
 
 
+@py_class
 class AssertStmt(Stmt):
-    def __init__(self, cond: Union[Expr, bool], msg: Optional[str]):
-        super().__init__()
-        self.cond: Expr = convert(cond)
-        self.msg: Optional[str] = msg
+    cond: Any
+    msg: Any = None
+
+    def __post_init__(self):
+        self.cond = convert(self.cond)
 
 
+@py_class
 class AsmStmt(Stmt):
-    def __init__(
-        self,
+    template_string: Any = ""
+    output_labels: Any = ()
+    output_exprs: Any = ()
+    input_labels: Any = ()
+    input_exprs: Any = ()
+    is_volatile: bool = False
+    memory_fence: bool = False
+
+    @staticmethod
+    def from_pairs(
         template_string: str = "",
         outputs: Sequence[Tuple[str, Expr]] = (),
         inputs: Sequence[Tuple[str, Expr]] = (),
         is_volatile=False,
         memory_fence=False,
     ):
-        self.template_string = template_string
-        self.output_labels = [pr[0] for pr in outputs]
-        self.output_exprs = [pr[1] for pr in outputs]
-        self.input_labels = [pr[0] for pr in inputs]
-        self.input_exprs = [pr[1] for pr in inputs]
-        self.is_volatile = is_volatile
-        self.memory_fence = memory_fence
+        return AsmStmt(
+            template_string=template_string,
+            output_labels=[pr[0] for pr in outputs],
+            output_exprs=[pr[1] for pr in outputs],
+            input_labels=[pr[0] for pr in inputs],
+            input_exprs=[pr[1] for pr in inputs],
+            is_volatile=is_volatile,
+            memory_fence=memory_fence,
+        )
 
 
+@py_class
 class BlackBoxStmt(Stmt):
-    def __init__(self, template_string: str, *exprs: Union[Expr, str]):
-        super().__init__()
-        self.template_string: str = template_string
-        self.exprs: Tuple[Union[str, Expr]] = convert(exprs)
+    template_string: Any
+    exprs: Any = ()
+
+    def __post_init__(self):
+        self.exprs = convert(self.exprs)
         expect_args_num = self.template_string.count("{}")
-        if expect_args_num != len(exprs):
-            raise ValueError("Invalid template string: {} for {} args".format(self.template_string, len(exprs)))
+        if expect_args_num != len(self.exprs):
+            raise ValueError("Invalid template string: {} for {} args".format(self.template_string, len(self.exprs)))
 
 
+@py_class
 class SeqStmt(Stmt):
-    def __init__(self, seq: List[Stmt]):
-        super().__init__()
-        self.seq: Tuple[Stmt] = tuple(seq)
-        for stmt in seq:
+    seq: Any
+
+    def __post_init__(self):
+        self.seq = tuple(self.seq)
+        for stmt in self.seq:
             assert isinstance(stmt, Stmt), str(type(stmt))
 
 
+@py_class
 class LaunchKernelStmt(Stmt):
-    _supported_targets = ["cuda", "hip", "cpu"]
+    _supported_targets: ClassVar[list] = ["cuda", "hip", "cpu"]
 
-    def __init__(
-        self,
-        func_var: Var,
-        args: Sequence[Expr],
-        grid_dim: Tuple[Expr, Expr, Expr],
-        cluster_dim: Tuple[Expr, Expr, Expr],
-        block_dim: Tuple[Expr, Expr, Expr],
-        shared_mem: Expr,
-        target: str,
-    ):
-        if target not in self._supported_targets:
-            raise ValueError(f"Unsupported target: {target}")
+    func_var: Any
+    args: Any
+    grid_dim: Any
+    cluster_dim: Any
+    block_dim: Any
+    shared_mem_bytes: Any
+    target: Any
 
-        self.func_var: Var = func_var
-        self.args: List[Expr] = list(args)
-        self.grid_dim: Tuple[Expr, Expr, Expr] = grid_dim
-        self.cluster_dim: Tuple[Expr, Expr, Expr] = cluster_dim
-        self.block_dim: Tuple[Expr, Expr, Expr] = block_dim
-        self.shared_mem_bytes: Expr = shared_mem
-        self.target: str = target
-
-        assert func_var.name is not None
+    def __post_init__(self):
+        if self.target is not None and self.target not in self._supported_targets:
+            raise ValueError(f"Unsupported target: {self.target}")
+        self.args = list(self.args)
+        assert self.func_var.name is not None
 
 
 def asm(
@@ -435,7 +470,7 @@ def asm(
     for x in inputs:
         constraint = get_register_type(x)
         updated_inputs.append((constraint, convert(x)))
-    return AsmStmt(template, updated_outputs, updated_inputs, is_volatile, memory_fence)
+    return AsmStmt.from_pairs(template, updated_outputs, updated_inputs, is_volatile, memory_fence)
 
 
 Int = Union[Expr, int]
@@ -452,7 +487,7 @@ def launch_kernel(
 ) -> LaunchKernelStmt:
     launch_config: List[Tuple[Expr, Expr, Expr]] = []
     for dims in [grid_dim, cluster_dim, block_dim]:
-        if not isinstance(dims, (list, tuple)):
+        if not isinstance(dims, (list, tuple, tvm_ffi.Array)):
             dims = [dims]
         dims = list(dims)
         if len(dims) > 3:
@@ -461,4 +496,12 @@ def launch_kernel(
             dims.append(1)
         launch_config.append(convert(dims))
     grid_dim, cluster_dim, block_dim = launch_config
-    return LaunchKernelStmt(func_var, args, grid_dim, cluster_dim, block_dim, convert(shared_mem), target)
+    return LaunchKernelStmt(
+        func_var=func_var,
+        args=args,
+        grid_dim=grid_dim,
+        cluster_dim=cluster_dim,
+        block_dim=block_dim,
+        shared_mem_bytes=convert(shared_mem),
+        target=target,
+    )

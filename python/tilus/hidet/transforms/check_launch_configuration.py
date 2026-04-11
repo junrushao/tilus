@@ -35,7 +35,7 @@ from tilus.hidet.utils.py import prod
 
 def check_cuda_error():
     stmt = BlackBoxStmt(
-        r"""{cudaError_t err = cudaGetLastError(); if (err != cudaSuccess) TVM_FFI_THROW(RuntimeError) << "CUDA error: " << """
+        template_string=r"""{cudaError_t err = cudaGetLastError(); if (err != cudaSuccess) TVM_FFI_THROW(RuntimeError) << "CUDA error: " << """
         r"""cudaGetErrorString(err) << "\n";}"""
     )
     return stmt
@@ -82,9 +82,8 @@ class CheckLaunchConfigurationRewriter(IRRewriter):
                 # if the shared memory is larger than 48KB, we should call cudaFuncSetAttribute
                 if stmt.target == "cuda":
                     sb += BlackBoxStmt(
-                        "cudaFuncSetAttribute({}, cudaFuncAttributeMaxDynamicSharedMemorySize, {});",
-                        stmt.func_var,
-                        stmt.shared_mem_bytes,
+                        template_string="cudaFuncSetAttribute({}, cudaFuncAttributeMaxDynamicSharedMemorySize, {});",
+                        exprs=(stmt.func_var, stmt.shared_mem_bytes),
                     )
 
                     sb += check_cuda_error()

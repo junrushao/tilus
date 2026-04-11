@@ -23,17 +23,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from functools import cached_property
 from typing import Any
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes.floats import float32, float64
 from tilus.hidet.ir.type import DataType
 
 
+@py_class
 class ComplexType(DataType):
-    def __init__(self, name, short_name, base_dtype: DataType):
-        super().__init__(name, short_name, 2 * base_dtype.nbytes)
-        self.base_dtype: DataType = base_dtype
+    base_dtype: Any  # DataType
 
     def is_float(self) -> bool:
         return False
@@ -63,11 +64,11 @@ class ComplexType(DataType):
         else:
             raise RuntimeError("Invalid constant value for complex type: {}".format(value))
 
-    @cached_property
+    @property
     def one(self):
         return self.constant(1.0 + 0.0j)
 
-    @cached_property
+    @property
     def zero(self):
         return self.constant(0.0 + 0.0j)
 
@@ -80,8 +81,8 @@ class ComplexType(DataType):
         raise RuntimeError("Complex type has no maximum value")
 
 
-complex64 = ComplexType("complex64", "c64", base_dtype=float32)
-complex128 = ComplexType("complex128", "c128", base_dtype=float64)
+complex64 = ComplexType(_name="complex64", _short_name="c64", _nbytes=2 * float32.nbytes, base_dtype=float32)
+complex128 = ComplexType(_name="complex128", _short_name="c128", _nbytes=2 * float64.nbytes, base_dtype=float64)
 
 c64 = complex64
 c128 = complex128

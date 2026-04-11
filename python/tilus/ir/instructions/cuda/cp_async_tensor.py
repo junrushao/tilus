@@ -14,15 +14,16 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, as_expr
 from tilus.ir.inst import Instruction
 from tilus.ir.tensor import GlobalTensor, SharedTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncTensorGlobalToSharedInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: tuple[int, ...]
@@ -56,10 +57,10 @@ class CopyAsyncTensorGlobalToSharedInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncTensorSharedToGlobalInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: tuple[int, ...]
+    dims: Optional[tuple[int, ...]]
     cache_policy: Optional[Expr]
 
     @staticmethod
@@ -80,14 +81,14 @@ class CopyAsyncTensorSharedToGlobalInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncTensorCommitGroupInst(Instruction):
     @staticmethod
     def create() -> CopyAsyncTensorCommitGroupInst:
         return CopyAsyncTensorCommitGroupInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncTensorWaitGroupInst(Instruction):
     n: int
     read: bool = False

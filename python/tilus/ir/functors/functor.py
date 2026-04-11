@@ -12,11 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import dataclasses
 from typing import Any, Dict, Hashable, List, Mapping, Tuple, TypeVar, Union
+
+import tvm_ffi
 
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.type import BaseType
+from tilus.ir._replace import replace
 from tilus.ir.func import Function
 from tilus.ir.inst import Instruction, InstructionConfig
 from tilus.ir.layout import GlobalLayout, RegisterLayout, SharedLayout, TMemoryLayout
@@ -44,6 +46,11 @@ from tilus.utils import same_list
 InstClsVar = TypeVar("InstClsVar", bound=Instruction)
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class IRFunctor:
     def __init__(self):
         self.memo = {}
@@ -51,100 +58,93 @@ class IRFunctor:
     def __call__(self, node):
         return self.visit(node)
 
+    # Type dispatch table: maps concrete types to visitor method names.
+    # Built lazily on first use to avoid import-order issues.
+    _dispatch_table: Dict[type, str] = {}
+
+    @classmethod
+    def _build_dispatch_table(cls) -> Dict[type, str]:
+        if cls._dispatch_table:
+            return cls._dispatch_table
+        table: Dict[type, str] = {
+            InstStmt: "visit_InstStmt",
+            Program: "visit_Program",
+            Function: "visit_Function",
+            SeqStmt: "visit_SeqStmt",
+            ForStmt: "visit_ForStmt",
+            ThreadGroupStmt: "visit_ThreadGroupStmt",
+            IfStmt: "visit_IfStmt",
+            WhileStmt: "visit_WhileStmt",
+            BreakStmt: "visit_BreakStmt",
+            ReturnStmt: "visit_ReturnStmt",
+            DeclareStmt: "visit_DeclareStmt",
+            LetStmt: "visit_LetStmt",
+            AssignStmt: "visit_AssignStmt",
+            EvaluateStmt: "visit_EvaluateStmt",
+            TensorItemPtrStmt: "visit_TensorItemPtrStmt",
+            TensorItemValueStmt: "visit_TensorItemValueStmt",
+            RegisterTensor: "visit_RegisterTensor",
+            SharedTensor: "visit_SharedTensor",
+            GlobalTensor: "visit_GlobalTensor",
+            TMemoryTensor: "visit_TMemoryTensor",
+            RegisterLayout: "visit_RegisterLayout",
+            SharedLayout: "visit_SharedLayout",
+            GlobalLayout: "visit_GlobalLayout",
+            TMemoryLayout: "visit_TMemoryLayout",
+            list: "visit_list",
+            tvm_ffi.Array: "visit_list",
+            tuple: "visit_tuple",
+            dict: "visit_dict",
+            tvm_ffi.Map: "visit_dict",
+            int: "visit_PyConstant",
+            float: "visit_PyConstant",
+            bool: "visit_PyConstant",
+            str: "visit_PyConstant",
+            type(None): "visit_PyConstant",
+        }
+        cls._dispatch_table = table
+        return table
+
     def visit(self, node):
         key: Hashable
-        if isinstance(node, (list, tuple, dict)):
+        node_type = type(node)
+        if node_type in (list, tuple, dict):
             key = id(node)
-        elif isinstance(node, (str, int, float, bool)):
-            key = (type(node), node)
+        elif node_type in (tvm_ffi.Array, tvm_ffi.Map):
+            key = ("__container__", node.__chandle__())
+        elif node_type in (str, int, float, bool):
+            key = (node_type, node)
         else:
             key = node
         if key in self.memo:
             return self.memo[key]
 
-        # inst stmt
-        if isinstance(node, InstStmt):
-            ret = self.visit_InstStmt(node)
-        # instruction
+        # Fast path: exact type match in dispatch table
+        table = self._build_dispatch_table()
+        method_name = table.get(node_type)
+        if method_name is not None:
+            ret = getattr(self, method_name)(node)
+        # Instruction subclasses: check class name for specific visitor, fall back to generic
         elif isinstance(node, Instruction):
-            method_name = "visit_" + node.__class__.__name__
-            visit_method = getattr(self.__class__, method_name, None)
-            if visit_method is None:
-                ret = self.visit_Instruction(node)
-            else:
-                ret = visit_method(self, node)
-        # instruction config
+            visit_method = getattr(self.__class__, "visit_" + node_type.__name__, None)
+            ret = visit_method(self, node) if visit_method else self.visit_Instruction(node)
         elif isinstance(node, InstructionConfig):
-            method_name = "visit_" + node.__class__.__name__
-            visit_method = getattr(self.__class__, method_name, None)
-            if visit_method is None:
-                ret = self.visit_InstructionConfig(node)
-            else:
+            visit_method = getattr(self.__class__, "visit_" + node_type.__name__, None)
+            ret = visit_method(self, node) if visit_method else self.visit_InstructionConfig(node)
+        # Fallback for subclasses not in the table
+        elif isinstance(node, Stmt):
+            # Try dispatch by name first
+            visit_method = getattr(self.__class__, "visit_" + node_type.__name__, None)
+            if visit_method:
                 ret = visit_method(self, node)
-        elif isinstance(node, Program):
-            ret = self.visit_Program(node)
-        elif isinstance(node, Function):
-            ret = self.visit_Function(node)
-        # other statements
-        elif isinstance(node, SeqStmt):
-            ret = self.visit_SeqStmt(node)
-        elif isinstance(node, ForStmt):
-            ret = self.visit_ForStmt(node)
-        elif isinstance(node, ThreadGroupStmt):
-            ret = self.visit_ThreadGroupStmt(node)
-        elif isinstance(node, IfStmt):
-            ret = self.visit_IfStmt(node)
-        elif isinstance(node, WhileStmt):
-            ret = self.visit_WhileStmt(node)
-        elif isinstance(node, BreakStmt):
-            ret = self.visit_BreakStmt(node)
-        elif isinstance(node, ReturnStmt):
-            ret = self.visit_ReturnStmt(node)
-        elif isinstance(node, DeclareStmt):
-            ret = self.visit_DeclareStmt(node)
-        elif isinstance(node, LetStmt):
-            ret = self.visit_LetStmt(node)
-        elif isinstance(node, AssignStmt):
-            ret = self.visit_AssignStmt(node)
-        elif isinstance(node, EvaluateStmt):
-            ret = self.visit_EvaluateStmt(node)
-        elif isinstance(node, TensorItemPtrStmt):
-            ret = self.visit_TensorItemPtrStmt(node)
-        elif isinstance(node, TensorItemValueStmt):
-            ret = self.visit_TensorItemValueStmt(node)
-        # scalar expression and type
+            else:
+                raise NotImplementedError(node_type.__name__)
         elif isinstance(node, Expr):
             ret = self.visit_Expr(node)
         elif isinstance(node, BaseType):
             ret = self.visit_BaseType(node)
-        # value and layout
-        elif isinstance(node, RegisterTensor):
-            ret = self.visit_RegisterTensor(node)
-        elif isinstance(node, SharedTensor):
-            ret = self.visit_SharedTensor(node)
-        elif isinstance(node, GlobalTensor):
-            ret = self.visit_GlobalTensor(node)
-        elif isinstance(node, TMemoryTensor):
-            ret = self.visit_TMemoryTensor(node)
-        elif isinstance(node, RegisterLayout):
-            ret = self.visit_RegisterLayout(node)
-        elif isinstance(node, SharedLayout):
-            ret = self.visit_SharedLayout(node)
-        elif isinstance(node, GlobalLayout):
-            ret = self.visit_GlobalLayout(node)
-        elif isinstance(node, TMemoryLayout):
-            ret = self.visit_TMemoryLayout(node)
-        # python native
-        elif isinstance(node, list):
-            ret = self.visit_list(node)
-        elif isinstance(node, tuple):
-            ret = self.visit_tuple(node)
-        elif isinstance(node, dict):
-            ret = self.visit_dict(node)
-        elif isinstance(node, (int, float, bool, str, type(None))):
-            ret = self.visit_PyConstant(node)
         else:
-            raise NotImplementedError(node.__class__.__name__)
+            raise NotImplementedError(node_type.__name__)
 
         self.memo[key] = ret
         return ret
@@ -291,8 +291,9 @@ class IRRewriter(IRFunctor):
             return Program(functions=functions)
 
     def visit_Function(self, func: Function) -> Function:
-        body = self.visit(func.body)
-        if body is func.body:
+        orig_body = func.body
+        body = self.visit(orig_body)
+        if _unchanged(body, orig_body):
             return func
         else:
             return Function(
@@ -314,32 +315,39 @@ class IRRewriter(IRFunctor):
             raise ValueError(f"An instruction should be rewritten to an instruction or a statement, got {inst_or_stmt}")
 
     def visit_SeqStmt(self, stmt: SeqStmt) -> Stmt:
-        seq = self.visit(stmt.seq)
-        if seq is stmt.seq:
+        orig_seq = stmt.seq
+        seq = self.visit(orig_seq)
+        if _unchanged(seq, orig_seq):
             return stmt
         else:
             return SeqStmt(seq)
 
     def visit_ForStmt(self, stmt: ForStmt) -> Stmt:
-        extent = self.visit(stmt.extent)
-        body = self.visit(stmt.body)
-        if extent is stmt.extent and body is stmt.body:
+        orig_extent = stmt.extent
+        orig_body = stmt.body
+        extent = self.visit(orig_extent)
+        body = self.visit(orig_body)
+        if _unchanged(extent, orig_extent) and _unchanged(body, orig_body):
             return stmt
         else:
             return ForStmt(stmt.iter_var, extent, body, stmt.unroll_factor)
 
     def visit_ThreadGroupStmt(self, stmt: ThreadGroupStmt) -> Stmt:
-        body = self.visit(stmt.body)
-        if body is stmt.body:
+        orig_body = stmt.body
+        body = self.visit(orig_body)
+        if _unchanged(body, orig_body):
             return stmt
         else:
             return ThreadGroupStmt(stmt.thread_begin, stmt.num_threads, body)
 
     def visit_IfStmt(self, stmt: IfStmt) -> Stmt:
-        cond = self.visit(stmt.cond)
-        then_body = self.visit(stmt.then_body)
-        else_body = self.visit(stmt.else_body)
-        if cond is stmt.cond and then_body is stmt.then_body and else_body is stmt.else_body:
+        orig_cond = stmt.cond
+        orig_then = stmt.then_body
+        orig_else = stmt.else_body
+        cond = self.visit(orig_cond)
+        then_body = self.visit(orig_then)
+        else_body = self.visit(orig_else)
+        if _unchanged(cond, orig_cond) and _unchanged(then_body, orig_then) and _unchanged(else_body, orig_else):
             return stmt
         else:
             return IfStmt(cond, then_body, else_body)
@@ -351,81 +359,95 @@ class IRRewriter(IRFunctor):
         return stmt
 
     def visit_DeclareStmt(self, stmt: DeclareStmt) -> Stmt:
-        init = self.visit(stmt.init)
-        if init is stmt.init:
+        orig_init = stmt.init
+        init = self.visit(orig_init)
+        if _unchanged(init, orig_init):
             return stmt
         else:
             return DeclareStmt(stmt.var, init)
 
     def visit_LetStmt(self, stmt: LetStmt) -> Stmt:
-        bind_values = self.visit(stmt.bind_values)
-        body = self.visit(stmt.body)
-        if bind_values is stmt.bind_values and body is stmt.body:
+        orig_bind_values = stmt.bind_values
+        orig_body = stmt.body
+        bind_values = self.visit(orig_bind_values)
+        body = self.visit(orig_body)
+        if _unchanged(bind_values, orig_bind_values) and _unchanged(body, orig_body):
             return stmt
         else:
             return LetStmt(stmt.bind_vars, bind_values, body)
 
     def visit_AssignStmt(self, stmt: AssignStmt) -> Stmt:
-        value = self.visit(stmt.value)
-        if value is stmt.value:
+        orig_value = stmt.value
+        value = self.visit(orig_value)
+        if _unchanged(value, orig_value):
             return stmt
         else:
             return AssignStmt(stmt.var, value)
 
     def visit_EvaluateStmt(self, stmt):
-        expr = self.visit(stmt.expr)
-        pred = self.visit(stmt.pred)
-        if expr is stmt.expr and pred is stmt.pred:
+        orig_expr = stmt.expr
+        orig_pred = stmt.pred
+        expr = self.visit(orig_expr)
+        pred = self.visit(orig_pred)
+        if _unchanged(expr, orig_expr) and _unchanged(pred, orig_pred):
             return stmt
         else:
             return EvaluateStmt(expr=expr, pred=pred)
 
     def visit_TensorItemPtrStmt(self, stmt: TensorItemPtrStmt) -> Stmt:
-        tensor = self.visit(stmt.tensor)
-        if tensor is stmt.tensor:
+        orig_tensor = stmt.tensor
+        tensor = self.visit(orig_tensor)
+        if _unchanged(tensor, orig_tensor):
             return stmt
         else:
             return TensorItemPtrStmt(stmt.ptr_var, tensor, stmt.space)
 
     def visit_TensorItemValueStmt(self, stmt: TensorItemValueStmt) -> Stmt:
-        tensor = self.visit(stmt.tensor)
-        if tensor is stmt.tensor:
+        orig_tensor = stmt.tensor
+        tensor = self.visit(orig_tensor)
+        if _unchanged(tensor, orig_tensor):
             return stmt
         else:
             return TensorItemValueStmt(stmt.var, tensor)
 
     def visit_WhileStmt(self, stmt: WhileStmt) -> Stmt:
-        cond = self.visit(stmt.cond)
-        body = self.visit(stmt.body)
-        if cond is stmt.cond and body is stmt.body:
+        orig_cond = stmt.cond
+        orig_body = stmt.body
+        cond = self.visit(orig_cond)
+        body = self.visit(orig_body)
+        if _unchanged(cond, orig_cond) and _unchanged(body, orig_body):
             return stmt
         else:
             return WhileStmt(cond, body)
 
     def visit_RegisterTensor(self, tensor: RegisterTensor) -> RegisterTensor:
-        optional_layout = self.visit(tensor.optional_layout)
-        if optional_layout is tensor.optional_layout:
+        orig_layout = tensor.optional_layout
+        optional_layout = self.visit(orig_layout)
+        if _unchanged(optional_layout, orig_layout):
             return tensor
         else:
             return RegisterTensor.create(dtype=tensor.dtype, shape=tensor.shape, optional_layout=optional_layout)
 
     def visit_SharedTensor(self, tensor: SharedTensor) -> SharedTensor:
-        optional_layout = self.visit(tensor.optional_layout)
-        if optional_layout is tensor.optional_layout:
+        orig_layout = tensor.optional_layout
+        optional_layout = self.visit(orig_layout)
+        if _unchanged(optional_layout, orig_layout):
             return tensor
         else:
             return SharedTensor.create(dtype=tensor.dtype, shape=tensor.shape, optional_layout=optional_layout)
 
     def visit_GlobalTensor(self, tensor: GlobalTensor) -> GlobalTensor:
-        layout = self.visit(tensor.layout)
-        if layout is tensor.layout:
+        orig_layout = tensor.layout
+        layout = self.visit(orig_layout)
+        if _unchanged(layout, orig_layout):
             return tensor
         else:
             return GlobalTensor.create(dtype=tensor.dtype, layout=layout)
 
     def visit_TMemoryTensor(self, tensor: TMemoryTensor) -> TMemoryTensor:
-        optional_layout = self.visit(tensor.optional_layout)
-        if optional_layout is tensor.optional_layout:
+        orig_layout = tensor.optional_layout
+        optional_layout = self.visit(orig_layout)
+        if _unchanged(optional_layout, orig_layout):
             return tensor
         else:
             return TMemoryTensor.create(dtype=tensor.dtype, shape=tensor.shape, optional_layout=optional_layout)
@@ -437,11 +459,14 @@ class IRRewriter(IRFunctor):
         return layout
 
     def visit_GlobalLayout(self, layout: GlobalLayout) -> GlobalLayout:
-        shape = self.visit(layout.shape)
-        size = self.visit(layout.size)
-        offset = self.visit(layout.offset)
+        orig_shape = layout.shape
+        orig_size = layout.size
+        orig_offset = layout.offset
+        shape = self.visit(orig_shape)
+        size = self.visit(orig_size)
+        offset = self.visit(orig_offset)
 
-        if shape is layout.shape and offset is layout.offset and size is layout.size:
+        if _unchanged(shape, orig_shape) and _unchanged(offset, orig_offset) and _unchanged(size, orig_size):
             return layout
         else:
             return GlobalLayout(shape=shape, size=size, axes=layout.axes, offset=offset)
@@ -451,18 +476,21 @@ class IRRewriter(IRFunctor):
 
     # instructions
     def visit_Instruction(self, inst: InstClsVar) -> InstClsVar:
-        output = self.visit(inst.output)
-        inputs = self.visit(inst.inputs)
-        attributes: Mapping[str, Any] = {key: self.visit(value) for key, value in inst.attributes.items()}
+        orig_output = inst.output
+        orig_inputs = inst.inputs
+        orig_attributes = inst.attributes
+        output = self.visit(orig_output)
+        inputs = self.visit(orig_inputs)
+        attributes: Mapping[str, Any] = {key: self.visit(value) for key, value in orig_attributes.items()}
 
         if (
-            output is inst.output
-            and inputs is inst.inputs
-            and all(a is b for a, b in zip(attributes.values(), inst.attributes.values()))
+            _unchanged(output, orig_output)
+            and _unchanged(inputs, orig_inputs)
+            and all(_unchanged(a, b) for a, b in zip(attributes.values(), orig_attributes.values()))
         ):
             return inst
         else:
-            return dataclasses.replace(inst, output=output, inputs=inputs, **attributes)
+            return replace(inst, output=output, inputs=inputs, **attributes)
 
     # instruction configs
     def visit_InstructionConfig(self, inst_config: InstructionConfig) -> Any:

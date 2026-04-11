@@ -25,8 +25,23 @@
 # limitations under the License.
 from typing import Any, Dict, List, Tuple, Type, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.node import Node
 from tilus.hidet.utils import same_list
+
+# Type-based dispatch tables (module-level for fast frozenset/dict lookup).
+# Using type() instead of isinstance() avoids ABC __instancecheck__ overhead.
+_CONSTANT_TYPES = frozenset({str, bool, int, float, complex, type(None), tvm_ffi.core.String})
+_ID_KEY_TYPES = frozenset({list, dict})
+_CHANDLE_KEY_TYPES = frozenset({tvm_ffi.Array, tvm_ffi.Map})
+_BASE_DISPATCH = {
+    tuple: "visit_Tuple",
+    tvm_ffi.Array: "visit_Tuple",
+    list: "visit_List",
+    dict: "visit_Dict",
+    tvm_ffi.Map: "visit_Dict",
+}
 
 
 class BaseFunctor:
@@ -37,20 +52,26 @@ class BaseFunctor:
         return self.visit(node)
 
     def visit(self, node: Union[Node, Tuple, List, Dict[str, Any], str, int, float]):
-        if isinstance(node, (str, bool, int, float, complex, type(None))):
-            # we do not need to memoize the python constants because hash(1.0) == hash(1) == hash(True)
+        # Use type(node) lookups instead of isinstance to avoid ABC
+        # __instancecheck__ overhead on tvm_ffi.Object subclasses.
+        node_type = type(node)
+        if node_type in _CONSTANT_TYPES:
             return self.visit_PyConstant(node)
 
-        key = id(node) if isinstance(node, (list, dict)) else node
+        if node_type in _ID_KEY_TYPES:
+            key = id(node)
+        elif node_type in _CHANDLE_KEY_TYPES:
+            key = ("__container__", node.__chandle__())
+        else:
+            key = node
         if self.memo is not None and key in self.memo:
             return self.memo[key]
 
         functor_cls: Type[BaseFunctor] = type(self)
-        node_cls = type(node)
         dispatch_table = getattr(functor_cls, "__dispatch_table", None)
-        if dispatch_table and node_cls in dispatch_table:
+        if dispatch_table and node_type in dispatch_table:
             # fast path
-            ret = dispatch_table[node_cls](self, node)
+            ret = dispatch_table[node_type](self, node)
         else:
             # slow path
             # iterate through the mro of the class to find a visit_dispatch method that can handle the node
@@ -64,7 +85,7 @@ class BaseFunctor:
                     if dispatch_table is None:
                         dispatch_table = {}
                         setattr(functor_cls, "__dispatch_table", dispatch_table)
-                    dispatch_table[node_cls] = dispatch_func
+                    dispatch_table[node_type] = dispatch_func
                     break
             else:
                 raise NotImplementedError("Can not dispatch object with type {}".format(type(node)))
@@ -75,18 +96,14 @@ class BaseFunctor:
         return ret
 
     def visit_dispatch(self, node: Union[Node, Tuple, List, Dict[str, Any], str, int, float, Any]):
-        if isinstance(node, tuple):
-            return self.visit_Tuple(node)
-        elif isinstance(node, list):
-            return self.visit_List(node)
-        elif isinstance(node, dict):
-            return self.visit_Dict(node)
-        elif isinstance(node, (str, int, float, complex)) or node is None:
+        method_name = _BASE_DISPATCH.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
+        if type(node) in _CONSTANT_TYPES:
             return self.visit_PyConstant(node)
-        elif isinstance(node, Node):
+        if isinstance(node, Node):
             return self.visit_NotDispatchedNode(node)
-        else:
-            return self.visit_NotDispatched(node)
+        return self.visit_NotDispatched(node)
 
     def visit_Tuple(self, tp: Tuple):
         raise NotImplementedError()

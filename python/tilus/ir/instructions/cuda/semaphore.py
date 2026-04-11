@@ -14,13 +14,15 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr
 from tilus.ir.inst import Instruction
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class LockSemaphoreInst(Instruction):
     semaphore: Expr
     value: Expr
@@ -33,7 +35,7 @@ class LockSemaphoreInst(Instruction):
         return LockSemaphoreInst(inputs=(), output=None, semaphore=semaphore, value=value)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ReleaseSemaphoreInst(Instruction):
     semaphore: Expr
     value: Expr

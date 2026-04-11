@@ -24,9 +24,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # pylint: disable=import-outside-toplevel
+from __future__ import annotations
+
 import itertools
 from collections import OrderedDict
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.node import Node
 from tilus.hidet.utils import prod
@@ -70,7 +75,7 @@ def concat_let_expr(var2value, body: Expr):
 
 
 def to_data_layout(obj):
-    if isinstance(obj, (tuple, list)):
+    if isinstance(obj, (tuple, list, tvm_ffi.Array)):
         return row_major(*obj)
     elif isinstance(obj, DataLayout):
         return obj
@@ -79,14 +84,18 @@ def to_data_layout(obj):
 
 
 # data layout
+@py_class
 class DataLayout(Node):
-    def __init__(self, shape=None, size=None):
+    shape: Any = None
+    size: Any = None
+
+    def __post_init__(self):
         from tilus.hidet import ir
 
-        if shape is None:
-            shape = []
-        self.shape: Tuple[Int] = tuple(int(v) if isinstance(v, ir.Constant) else v for v in shape)
-        self.size: Int = size
+        if self.shape is None:
+            self.shape = ()
+        else:
+            self.shape = tuple(int(v) if isinstance(v, ir.Constant) else v for v in self.shape)
         assert all(isinstance(v, (ir.Expr, int)) for v in self.shape)
 
     def __call__(self, *args: Int):
@@ -127,7 +136,7 @@ class DataLayout(Node):
         raise NotImplementedError()
 
     def serialize(self, *args: Int):
-        if len(args) == 1 and isinstance(args[0], (tuple, list)):
+        if len(args) == 1 and isinstance(args[0], (tuple, list, tvm_ffi.Array)):
             # support usage such as within_bound([1, 2, 3])
             args = args[0]
         assert len(args) == len(self.shape)
@@ -135,7 +144,7 @@ class DataLayout(Node):
         return scalar_index
 
     def within_bound(self, *args: Int):
-        if isinstance(args[0], (tuple, list)) and len(args) == 1:
+        if isinstance(args[0], (tuple, list, tvm_ffi.Array)) and len(args) == 1:
             # support usage such as within_bound([1, 2, 3])
             args = args[0]
         assert len(args) == len(self.shape)
@@ -155,28 +164,32 @@ class DataLayout(Node):
         return ReshapeLayout(base=self, shape=shape)
 
     def local(self, *shape: Int):
-        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple, tvm_ffi.Array)):
             shape = shape[0]
         inner = LocalLayout(shape=shape)
         return compose(self, inner)
 
     def row_major(self, *shape: Int):
-        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple, tvm_ffi.Array)):
             shape = shape[0]
-        inner = RowMajorLayout(shape)
+        inner = row_major(*shape)
         return compose(self, inner)
 
     def column_major(self, *shape: Int):
-        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple, tvm_ffi.Array)):
             shape = shape[0]
-        inner = ColumnMajorLayout(shape)
+        inner = column_major(*shape)
         return compose(self, inner)
 
 
+@py_class
 class StridesLayout(DataLayout):
-    def __init__(self, shape, strides):
-        super().__init__(shape=shape, size=StridesLayout.storage_size(shape, strides))
-        self.strides: List[Int] = strides
+    strides: Any = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.size is None and self.strides is not None:
+            self.size = StridesLayout.storage_size(self.shape, self.strides)
 
     def global2local(self, *args: Int) -> Int:
         return sum(v * self.strides[i] for i, v in enumerate(args))
@@ -196,7 +209,7 @@ class StridesLayout(DataLayout):
 
     @staticmethod
     def from_shape(shape: Sequence[Int], perm: Sequence[int]):
-        return StridesLayout(shape, StridesLayout.shape2strides(shape, perm))
+        return StridesLayout(shape=shape, strides=StridesLayout.shape2strides(shape, perm))
 
     @staticmethod
     def shape2strides(shape: Sequence[Int], perm: Sequence[int]):
@@ -212,19 +225,21 @@ class StridesLayout(DataLayout):
         return strides
 
 
+@py_class
 class RowMajorLayout(StridesLayout):
-    def __init__(self, shape):
-        super().__init__(shape, StridesLayout.shape2strides(shape, list(range(len(shape)))))
+    pass
 
 
+@py_class
 class ColumnMajorLayout(StridesLayout):
-    def __init__(self, shape):
-        super().__init__(shape, StridesLayout.shape2strides(shape, list(reversed(range(len(shape))))))
+    pass
 
 
+@py_class
 class LocalLayout(DataLayout):
-    def __init__(self, shape):
-        super().__init__(shape=shape, size=1)
+    def __post_init__(self):
+        super().__post_init__()
+        self.size = 1
 
     def global2local(self, *args: Int) -> Int:
         return 0
@@ -235,6 +250,7 @@ class LocalLayout(DataLayout):
         return logical_and(*[v < s for s, v in zip(self.shape, args)])
 
 
+@py_class
 class SwizzleLayout(DataLayout):
     """
     Swizzle a layout (called base layout) to get a swizzled data layout. The shape of swizzled layout is the same as
@@ -247,35 +263,39 @@ class SwizzleLayout(DataLayout):
         (Note, swizzle requires the swizzled dimension to be a power of 2)
     """
 
-    def __init__(self, base: DataLayout, dim: int, regards_dim: Optional[int] = None, log_step: int = 0):
-        self.base: DataLayout = base
-        self.dim: int = int(dim)
-        if regards_dim is None:
-            if len(base.shape) != 2:
+    base: Any = None
+    dim: int = 0
+    regards_dim: Any = None
+    log_step: int = 0
+
+    def __post_init__(self):
+        if self.regards_dim is None:
+            if len(self.base.shape) != 2:
                 raise ValueError(
                     "Optional regards_dim is only available for 2-rank layout, got layout with shape {}.".format(
-                        base.shape
+                        self.base.shape
                     )
                 )
-            self.regards_dim = 1 - dim
-        else:
-            self.regards_dim = regards_dim
-        self.log_step = log_step
+            self.regards_dim = 1 - self.dim
 
         if self.dim == self.regards_dim:
             raise ValueError(
                 "The swizzle dim and regards dim can not be the same, got {} and {}".format(self.dim, self.regards_dim)
             )
-        rank = len(base.shape)
+        rank = len(self.base.shape)
         if not (0 <= self.dim < rank and 0 <= self.regards_dim < rank):
             raise ValueError(
-                "The dim {} (regards dim {}) out of bound for layout {}".format(self.dim, self.regards_dim, base.shape)
+                "The dim {} (regards dim {}) out of bound for layout {}".format(
+                    self.dim, self.regards_dim, self.base.shape
+                )
             )
         if not is_power_of_two(self.base.shape[self.dim]):
             raise ValueError(
-                "The swizzled dim {} must be a power of 2, got length {}".format(self.dim, self.shape[self.dim])
+                "The swizzled dim {} must be a power of 2, got length {}".format(self.dim, self.base.shape[self.dim])
             )
-        super().__init__(shape=self.base.shape, size=self.base.size)
+        self.shape = self.base.shape
+        self.size = self.base.size
+        super().__post_init__()
 
     def global2local(self, *args: Int) -> Int:
         assert len(args) == len(self.shape)
@@ -296,17 +316,24 @@ class SwizzleLayout(DataLayout):
         return self.base.global2cond(*args)
 
 
+@py_class
 class PermuteLayout(DataLayout):
-    def __init__(self, base: DataLayout, perm: Sequence[int]):
-        assert len(base.shape) == len(perm)
-        perm_lst = [i for i in perm]
-        perm_lst.sort()
-        assert perm_lst == list(range(len(perm)))
+    base: Any = None
+    perm: Any = None
+    perm_shape: Any = None
 
-        self.base: DataLayout = base
-        self.perm: List[int] = list(perm)
-        self.perm_shape = [self.base.shape[i] for i in perm]
-        super().__init__(shape=self.perm_shape, size=self.base.size)
+    def __post_init__(self):
+        assert len(self.base.shape) == len(self.perm)
+        perm_lst = [i for i in self.perm]
+        perm_lst.sort()
+        assert perm_lst == list(range(len(self.perm)))
+
+        self.perm = list(self.perm)
+        if self.perm_shape is None:
+            self.perm_shape = [self.base.shape[i] for i in self.perm]
+        self.shape = tuple(self.perm_shape)
+        self.size = self.base.size
+        super().__post_init__()
 
     def global2local(self, *args: Int) -> Int:
         assert len(args) == len(self.shape)
@@ -318,13 +345,21 @@ class PermuteLayout(DataLayout):
         return self.base.global2cond(*permuted_args)
 
 
+@py_class
 class ReshapeLayout(DataLayout):
-    def __init__(self, base: DataLayout, shape: Sequence[Int]):
-        super().__init__(shape=shape, size=base.size)
-        assert prod(shape) == base.size
-        self.base = base
-        self.stride = [prod(shape[i:]) for i in range(1, len(shape))] + [1]
-        self.base_stride = [prod(base.shape[i:]) for i in range(1, len(base.shape))] + [1]
+    base: Any = None
+    stride: Any = None
+    base_stride: Any = None
+
+    def __post_init__(self):
+        # shape is set by the caller; normalize first, then compute derived fields
+        super().__post_init__()
+        assert prod(self.shape) == self.base.size
+        self.size = self.base.size
+        if self.stride is None:
+            self.stride = [prod(self.shape[i:]) for i in range(1, len(self.shape))] + [1]
+        if self.base_stride is None:
+            self.base_stride = [prod(self.base.shape[i:]) for i in range(1, len(self.base.shape))] + [1]
 
     def to_linear_index(self, args: List[Int]) -> Int:
         assert len(args) == len(self.shape)
@@ -340,12 +375,16 @@ class ReshapeLayout(DataLayout):
         return self.base.global2cond(*self.to_base_index(self.to_linear_index(args)))
 
 
+@py_class
 class ComposedLayout(DataLayout):
-    def __init__(self, outer: DataLayout, inner: DataLayout):
-        assert len(outer.shape) == len(inner.shape)
-        super().__init__(shape=[a * b for a, b in zip(outer.shape, inner.shape)], size=outer.size * inner.size)
-        self.outer = outer
-        self.inner = inner
+    outer: Any = None
+    inner: Any = None
+
+    def __post_init__(self):
+        assert len(self.outer.shape) == len(self.inner.shape)
+        self.shape = tuple(a * b for a, b in zip(self.outer.shape, self.inner.shape))
+        self.size = self.outer.size * self.inner.size
+        super().__post_init__()
 
     def global2local(self, *args: Int) -> Int:
         outer_args = [v // b for v, b in zip(args, self.inner.shape)]
@@ -360,11 +399,15 @@ class ComposedLayout(DataLayout):
         return LogicalAnd(self.outer.within_bound(*outer_args), self.inner.within_bound(*inner_args))
 
 
+@py_class
 class ConcatLayout(DataLayout):
-    def __init__(self, lhs: DataLayout, rhs: DataLayout):
-        super().__init__(shape=list(lhs.shape) + list(rhs.shape), size=lhs.size * rhs.size)
-        self.lhs = lhs
-        self.rhs = rhs
+    lhs: Any = None
+    rhs: Any = None
+
+    def __post_init__(self):
+        self.shape = tuple(list(self.lhs.shape) + list(self.rhs.shape))
+        self.size = self.lhs.size * self.rhs.size
+        super().__post_init__()
 
     def global2local(self, *args: Int) -> Int:
         lhs_args = args[: len(self.lhs.shape)]
@@ -380,15 +423,17 @@ class ConcatLayout(DataLayout):
 
 
 def row_major(*shape: Int):
-    return RowMajorLayout(shape)
+    strides = StridesLayout.shape2strides(shape, list(range(len(shape))))
+    return RowMajorLayout(shape=shape, strides=strides)
 
 
 def column_major(*shape: Int):
-    return ColumnMajorLayout(shape)
+    strides = StridesLayout.shape2strides(shape, list(reversed(range(len(shape)))))
+    return ColumnMajorLayout(shape=shape, strides=strides)
 
 
 def local_layout(*shape: Int):
-    return LocalLayout(shape)
+    return LocalLayout(shape=shape)
 
 
 def strided_layout(shape: Sequence[Int], ranks: Optional[List[int]] = None):
@@ -398,10 +443,10 @@ def strided_layout(shape: Sequence[Int], ranks: Optional[List[int]] = None):
 
 
 def compose(outer: DataLayout, inner: DataLayout) -> DataLayout:
-    return ComposedLayout(outer, inner)
+    return ComposedLayout(outer=outer, inner=inner)
 
 
 def concat(lhs: Union[DataLayout, List[int]], rhs: Union[DataLayout, List[int]]) -> DataLayout:
     lhs = to_data_layout(lhs)
     rhs = to_data_layout(rhs)
-    return ConcatLayout(lhs, rhs)
+    return ConcatLayout(lhs=lhs, rhs=rhs)

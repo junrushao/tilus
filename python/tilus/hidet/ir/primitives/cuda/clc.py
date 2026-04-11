@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.dtypes import int32, uint32
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -24,7 +22,6 @@ from tilus.hidet.utils import initialize
 def register_functions():
     from tilus.hidet.lang import asm, attrs, script  # pylint: disable=import-outside-toplevel
 
-    @no_type_check
     @script
     def cuda_cluster_launch_control_try_cancel(mbarrier_addr: uint32, response_smem_addr: uint32, multicast: bool):
         attrs.func_kind = "cuda_internal"
@@ -44,7 +41,6 @@ def register_functions():
                 is_volatile=True,
             )
 
-    @no_type_check
     @script
     def cuda_cluster_launch_control_query_response(response_smem_addr: uint32, outputs: ~int32):
         attrs.func_kind = "cuda_internal"

@@ -27,6 +27,7 @@ import os
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import tvm_ffi
 
 from tilus.hidet.ir import dtypes
 from tilus.hidet.ir.dialects.pattern import PlaceholderExpr
@@ -929,7 +930,7 @@ class CUDACodegen(Codegen):
         # launch bound for grid worker
         if func.kind == "cuda_kernel":
             block_dim = func.attrs["cuda.block_dim"]
-            if isinstance(block_dim, list):
+            if isinstance(block_dim, (list, tvm_ffi.Array)):
                 block_dim = prod(block_dim)
             if isinstance(block_dim, (Constant, int)):
                 if "cuda.min_blocks" in func.attrs:
@@ -1045,7 +1046,7 @@ class UpdatedCUDACodeGen(CUDACodegen):
         # launch bound for grid worker
         if func.kind == "cuda_kernel":
             block_dim = func.attrs["cuda.block_dim"]
-            if isinstance(block_dim, list):
+            if isinstance(block_dim, (list, tvm_ffi.Array)):
                 block_dim = prod(block_dim)
             if isinstance(block_dim, (Constant, int)):
                 if "cuda.min_blocks" in func.attrs:
@@ -1167,7 +1168,7 @@ class HIPCodegen(Codegen):
         # launch bound for grid worker
         if func.kind == "hip_kernel":
             block_dim = func.attrs["hip.block_dim"]
-            if isinstance(block_dim, list):
+            if isinstance(block_dim, (list, tvm_ffi.Array)):
                 block_dim = prod(block_dim)
             if isinstance(block_dim, (Constant, int)):
                 if "hip.min_blocks" in func.attrs:

@@ -43,7 +43,7 @@ class DecomposeRewriter(IRRewriter):
     def visit_Multiply(self, e: Multiply):
         if isinstance(e.a, Constant) and isinstance(e.b, Constant):
             # c1 * c2 => c1*c2
-            return Constant(value=e.a.value * e.b.value, const_type=self.type_infer(e))
+            return Constant(value=e.a.value * e.b.value, type=self.type_infer(e))
         elif isinstance(e.a, Add) and isinstance(e.b, Constant):
             # (e1 + e2) * c => e1 * c + e2 * c
             e1, e2, c = e.a.a, e.a.b, e.b

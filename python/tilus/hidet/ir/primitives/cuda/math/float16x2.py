@@ -25,6 +25,8 @@
 # limitations under the License.
 from typing import List, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.dtypes import float16, float16x2
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.func import primitive_func_pool, register_primitive_function
@@ -72,7 +74,7 @@ class CUDAFloat16x2MathFunctionSet(MathFunctionSet):
         if isinstance(items, Expr):
             items = [items]
         else:
-            if not isinstance(items, (list, tuple)):
+            if not isinstance(items, (list, tuple, tvm_ffi.Array)):
                 raise ValueError("float16x2 requires a list of items")
 
         if len(items) == 1:

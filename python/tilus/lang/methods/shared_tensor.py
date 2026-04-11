@@ -19,6 +19,8 @@ from tilus.lang.methods.exception import TensorMethodError
 
 
 class SharedTensorWithMethods(SharedTensor):
+    __slots__ = ("__dict__",)
+
     def __init__(self, tensor: SharedTensor, builder: StmtBuilder):
         super().__init__(tensor.dtype, tensor.shape, tensor.optional_layout)
         self.tensor: SharedTensor = tensor

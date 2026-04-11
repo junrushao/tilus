@@ -28,6 +28,8 @@ from __future__ import annotations
 from contextlib import ExitStack
 from typing import Any, ContextManager, Dict, Optional, Tuple
 
+from tvm_ffi.dataclasses import py_class
+
 from tilus.hidet.ir.expr import (
     Add,
     BinaryExpr,
@@ -50,12 +52,13 @@ from tilus.hidet.ir.node import Node
 from tilus.hidet.ir.type import BaseType
 
 
+@py_class
 class PlaceholderExpr(Expr):
-    def __init__(self, required_type: Optional[BaseType] = None, require_const=False, require_non_const=False):
-        super().__init__()
-        self.required_type: Optional[BaseType] = required_type
-        self.require_const: bool = require_const
-        self.require_non_const: bool = require_non_const
+    required_type: Any = None
+    require_const: bool = False
+    require_non_const: bool = False
+
+    def __post_init__(self):
         assert not (self.require_const and self.require_non_const), "require placeholder to be both const & non-const"
 
 

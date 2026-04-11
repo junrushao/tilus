@@ -14,8 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Literal, Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet import uint32
 from tilus.hidet.ir.expr import Expr
@@ -23,9 +24,9 @@ from tilus.ir.inst import Instruction
 from tilus.ir.tensor import RegisterTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AllocBarrierInst(Instruction):
-    counts: tuple[Expr | None, ...]
+    counts: tuple[Optional[Expr], ...]
 
     @staticmethod
     def create(counts: Sequence[Expr | None]) -> AllocBarrierInst:
@@ -33,12 +34,12 @@ class AllocBarrierInst(Instruction):
         return AllocBarrierInst(output=out, inputs=(), counts=tuple(counts))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ArriveBarrierInst(Instruction):
     barrier: Expr
     count: Expr
-    sem: Literal["release", "relaxed"]
-    scope: Literal["cta", "cluster"]
+    sem: str
+    scope: str
 
     @staticmethod
     def create(
@@ -47,12 +48,12 @@ class ArriveBarrierInst(Instruction):
         return ArriveBarrierInst(output=None, inputs=(), barrier=barrier, count=count, sem=sem, scope=scope)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ArriveExpectTxBarrierInst(Instruction):
     barrier: Expr
     transaction_bytes: Expr
-    sem: Literal["release", "relaxed"]
-    scope: Literal["cta", "cluster"]
+    sem: str
+    scope: str
 
     @staticmethod
     def create(
@@ -66,12 +67,12 @@ class ArriveExpectTxBarrierInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WaitBarrierInst(Instruction):
     barrier: Expr
     phase: Expr
-    sem: Literal["acquire", "relaxed"]
-    scope: Literal["cta", "cluster"]
+    sem: str
+    scope: str
 
     @staticmethod
     def create(
@@ -80,13 +81,13 @@ class WaitBarrierInst(Instruction):
         return WaitBarrierInst(output=None, inputs=(), barrier=barrier, phase=phase, sem=sem, scope=scope)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ArriveExpectTxMulticastBarrierInst(Instruction):
     barrier: Expr
     transaction_bytes: Expr
     multicast: int
-    sem: Literal["release", "relaxed"]
-    scope: Literal["cta", "cluster"]
+    sem: str
+    scope: str
 
     @staticmethod
     def create(
@@ -107,13 +108,13 @@ class ArriveExpectTxMulticastBarrierInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ArriveExpectTxRemoteBarrierInst(Instruction):
     barrier: Expr
     transaction_bytes: Expr
     target_rank: int
-    sem: Literal["release", "relaxed"]
-    scope: Literal["cta", "cluster"]
+    sem: str
+    scope: str
 
     @staticmethod
     def create(

@@ -23,6 +23,8 @@ from tilus.ir.tensor import RegisterTensor
 class UnaryRule(LayoutInferenceRule):
     @staticmethod
     def inference(ctx: LayoutInferenceContext, inst: Instruction) -> dict[RegisterTensor, RegisterLayout]:
+        if len(inst.inputs) != 1 or not isinstance(inst.inputs[0], RegisterTensor):
+            return {}
         x = inst.register_input
         y = inst.register_output
 

@@ -14,8 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr, Var, as_expr, index_vars
@@ -24,7 +25,7 @@ from tilus.ir.node import IRNode
 from tilus.utils import prod
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class GlobalLayout(IRNode):
     """The layout for global tensor.
 
@@ -46,7 +47,7 @@ class GlobalLayout(IRNode):
     """
 
     shape: tuple[Expr, ...]
-    size: Expr
+    size: Any  # Expr | int; prod() of constant shapes yields int
     axes: tuple[Var, ...]
     offset: Expr
 

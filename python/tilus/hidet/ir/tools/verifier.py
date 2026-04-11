@@ -20,6 +20,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+import tvm_ffi
+
 from tilus.hidet.ir import DeclareStmt, ForMappingStmt, ForStmt, Function, LetStmt
 from tilus.hidet.ir.expr import Constant, Expr, Var
 from tilus.hidet.ir.functors import IRVisitor
@@ -46,7 +48,7 @@ class Diagnostic:
             assert (
                 isinstance(item, Node)
                 or isinstance(item, (int, float, bool, str, Expr))
-                or isinstance(item, (list, tuple, dict))
+                or isinstance(item, (list, tuple, dict, tvm_ffi.Array, tvm_ffi.Map))
             ), type(item)
         self.kind = kind
         self.context = context

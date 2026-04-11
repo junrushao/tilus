@@ -23,13 +23,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tvm_ffi
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
 from tilus.hidet.ir.type import FuncType
 from tilus.hidet.utils import initialize
 
 
-def type_infer(arg_types):
+def _shfl_type_infer(arg_types):
     return arg_types[1]
+
+
+tvm_ffi.register_global_func("tilus.type_infer.shfl", _shfl_type_infer)
 
 
 @initialize()
@@ -37,10 +41,10 @@ def register_primitive_functions():
     functions = [
         ("cuda_activemask", "__activemask", FuncType([], "int32")),
         # T __shfl_sync(unsigned mask, T var, int srcLane, int width=warpSize)
-        ("cuda_shfl_sync", "__shfl_sync", FuncType(type_infer_func=type_infer)),
-        ("cuda_shfl_up_sync", "__shfl_up_sync", FuncType(type_infer_func=type_infer)),
-        ("cuda_shfl_down_sync", "__shfl_down_sync", FuncType(type_infer_func=type_infer)),
-        ("cuda_shfl_xor_sync", "__shfl_xor_sync", FuncType(type_infer_func=type_infer)),
+        ("cuda_shfl_sync", "__shfl_sync", FuncType(type_infer_func="tilus.type_infer.shfl")),
+        ("cuda_shfl_up_sync", "__shfl_up_sync", FuncType(type_infer_func="tilus.type_infer.shfl")),
+        ("cuda_shfl_down_sync", "__shfl_down_sync", FuncType(type_infer_func="tilus.type_infer.shfl")),
+        ("cuda_shfl_xor_sync", "__shfl_xor_sync", FuncType(type_infer_func="tilus.type_infer.shfl")),
     ]
     for name, codegen_name, func_type in functions:
         register_primitive_function(name=name, func_or_type=func_type, codegen_name=codegen_name)

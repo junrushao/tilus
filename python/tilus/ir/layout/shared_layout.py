@@ -14,10 +14,11 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var, as_expr, index_vars
 from tilus.hidet.ir.utils.index_transform import index_deserialize
@@ -26,8 +27,8 @@ from tilus.ir.node import IRNode
 from tilus.ir.utils.veceval import vectorized_evaluate
 
 
-@dataclass(frozen=True, eq=True)
-class Swizzle:
+@py_class
+class Swizzle(tvm_ffi.Object):
     """
     A swizzle function.
 
@@ -84,7 +85,7 @@ class Swizzle:
         return hash((self.base, self.bits, self.shift))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SharedLayout(IRNode):
     """The layout for shared tensor.
 
@@ -190,9 +191,9 @@ class SharedLayout(IRNode):
         if not isinstance(other, SharedLayout):
             return False
         return (
-            self.shape == other.shape
-            and self.mode_shape == other.mode_shape
-            and self.mode_strides == other.mode_strides
+            tuple(self.shape) == tuple(other.shape)
+            and tuple(self.mode_shape) == tuple(other.mode_shape)
+            and tuple(self.mode_strides) == tuple(other.mode_strides)
             and self.optional_swizzle == other.optional_swizzle
         )
 

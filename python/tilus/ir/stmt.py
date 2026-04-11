@@ -14,8 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import List, Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
 from tilus.ir.inst import Instruction
@@ -23,12 +24,12 @@ from tilus.ir.node import IRNode
 from tilus.ir.tensor import Tensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Stmt(IRNode):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SeqStmt(Stmt):
     seq: tuple[Stmt, ...]
 
@@ -37,7 +38,7 @@ class SeqStmt(Stmt):
         return SeqStmt(tuple(seq))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ForStmt(Stmt):
     iter_var: Var
     extent: Expr
@@ -50,7 +51,7 @@ class ForStmt(Stmt):
     unroll_factor: Optional[int]
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ThreadGroupStmt(Stmt):
     """Restricts execution of its body to a contiguous, aligned subset of threads.
 
@@ -92,45 +93,45 @@ class ThreadGroupStmt(Stmt):
         return ThreadGroupStmt(thread_begin, num_threads, body)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class IfStmt(Stmt):
     cond: Expr
     then_body: Stmt
-    else_body: Optional[Stmt]
+    else_body: Stmt
 
     def with_else_body(self, else_body: Stmt) -> IfStmt:
         return IfStmt(self.cond, self.then_body, else_body)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WhileStmt(Stmt):
     cond: Expr
     body: Stmt
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class BreakStmt(Stmt):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ReturnStmt(Stmt):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class DeclareStmt(Stmt):
     var: Var
     init: Optional[Expr]
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AssignStmt(Stmt):
     var: Var
     value: Expr
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class LetStmt(Stmt):
     bind_vars: tuple[Var, ...]
     bind_values: tuple[Expr, ...]
@@ -144,26 +145,26 @@ class LetStmt(Stmt):
         return LetStmt(tuple(bind_vars), tuple(bind_values), body)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class EvaluateStmt(Stmt):
     expr: Expr
     pred: Optional[Expr]
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class TensorItemPtrStmt(Stmt):
     ptr_var: Var
     tensor: Tensor
     space: str  # 'generic', 'shared', 'global', 'local'
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class TensorItemValueStmt(Stmt):
     var: Var
     tensor: Tensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class InstStmt(Stmt):
     inst: Instruction
 

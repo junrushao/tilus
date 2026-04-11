@@ -14,24 +14,23 @@
 # limitations under the License.
 from __future__ import annotations
 
-import dataclasses
 import itertools
-from dataclasses import dataclass
-from functools import cached_property
 from typing import Sequence, Union
 
 import tabulate
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.utils.index_transform import index_deserialize, index_serialize
 from tilus.hidet.utils import prod
+from tilus.ir._replace import replace
 from tilus.ir.layout.mfunction import MultiFunction, multi_function
 from tilus.ir.node import IRNode
 
 Int = Union[Expr, int]
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class RegisterLayout(IRNode):
     """Layout for register tensor.
 
@@ -72,10 +71,10 @@ class RegisterLayout(IRNode):
         if not isinstance(other, RegisterLayout):
             return False
         return (
-            self.shape == other.shape
-            and self.mode_shape == other.mode_shape
-            and self.spatial_modes == other.spatial_modes
-            and self.local_modes == other.local_modes
+            tuple(self.shape) == tuple(other.shape)
+            and tuple(self.mode_shape) == tuple(other.mode_shape)
+            and tuple(self.spatial_modes) == tuple(other.spatial_modes)
+            and tuple(self.local_modes) == tuple(other.local_modes)
         )
 
     def __hash__(self):
@@ -83,31 +82,31 @@ class RegisterLayout(IRNode):
 
     def with_shape(self, shape: Sequence[int]) -> RegisterLayout:
         validate_layout(shape, self.mode_shape, self.spatial_modes, self.local_modes)
-        return dataclasses.replace(self, shape=tuple(shape))
+        return replace(self, shape=tuple(shape))
 
-    @cached_property
+    @property
     def grouped_modes(self):
         from tilus.ir.layout.ops.utils import get_mode_groups
 
         return get_mode_groups(self.shape, self.mode_shape)
 
-    @cached_property
+    @property
     def spatial_shape(self) -> list[int]:
         return [self.mode_shape[i] if i >= 0 else -i for i in self.spatial_modes]
 
-    @cached_property
+    @property
     def local_shape(self) -> list[int]:
         return [self.mode_shape[i] for i in self.local_modes]
 
-    @cached_property
+    @property
     def local_size(self) -> int:
         return prod(self.local_shape)
 
-    @cached_property
+    @property
     def spatial_size(self) -> int:
         return prod(self.spatial_shape)
 
-    @cached_property
+    @property
     def size(self) -> int:
         return prod(self.shape)
 

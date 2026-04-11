@@ -25,6 +25,8 @@
 # limitations under the License.
 from typing import Literal, Optional, Tuple, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.dtypes import u32, u64
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives import is_primitive_function
@@ -176,8 +178,8 @@ def tcgen05_cp(
     >>> tcgen05_cp(tmem_addr, shared_desc, shape="128x128b", cta_group=2,
     ...            dst_fmt="b8x16", src_fmt="b6x16_p32")
     """
-    if isinstance(shape, tuple):
-        shape = _tuple_params_to_str(shape)
+    if isinstance(shape, (tuple, tvm_ffi.Array)):
+        shape = _tuple_params_to_str(tuple(shape))
 
     allowed_shapes = ("128x256b", "4x256b", "128x128b", "64x128b", "32x128b")
 

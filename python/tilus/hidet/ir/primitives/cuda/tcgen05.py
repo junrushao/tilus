@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from enum import Enum
-from typing import Optional, Sequence, no_type_check
+from typing import Optional, Sequence
 
 from tilus.hidet.ir.dtypes import int32, uint8, uint16, uint32, uint64
 from tilus.hidet.ir.expr import Expr, as_expr
@@ -272,7 +272,6 @@ def register_tcgen05_instructions():
     for cta_group in [Tcgen05CtaGroupKind.CTA_1, Tcgen05CtaGroupKind.CTA_2]:
 
         @register_primitive_function_decorator
-        @no_type_check
         @script
         def tcgen05_relinquish_alloc_permit_():
             attrs.func_name = resolve_tcgen05_relinquish_alloc_permit(cta_group)
@@ -280,7 +279,6 @@ def register_tcgen05_instructions():
             asm("tcgen05.relinquish_alloc_permit{}.sync.aligned;".format(cta_group.value), is_volatile=True)
 
         @register_primitive_function_decorator
-        @no_type_check
         @script
         def tcgen05_alloc_(dst: uint32, num_columns: uint32):
             attrs.func_name = resolve_tcgen05_alloc(cta_group)
@@ -292,7 +290,6 @@ def register_tcgen05_instructions():
             )
 
         @register_primitive_function_decorator
-        @no_type_check
         @script
         def tcgen05_dealloc_(taddr: int32, num_columns: uint32):
             attrs.func_name = resolve_tcgen05_dealloc(cta_group)
@@ -334,7 +331,6 @@ def register_tcgen05_instructions():
                 )
 
                 @register_primitive_function_decorator
-                @no_type_check
                 @script
                 def tcgen05_load_(taddr: int32, regs: regs_type):
                     attrs.func_name = resolve_tcgen05_load(pack, num, shape)
@@ -347,7 +343,6 @@ def register_tcgen05_instructions():
                     )
 
                 @register_primitive_function_decorator
-                @no_type_check
                 @script
                 def tcgen05_store_(taddr: int32, regs: regs_type):
                     attrs.func_name = resolve_tcgen05_store(pack, num, shape)
@@ -360,7 +355,6 @@ def register_tcgen05_instructions():
 
     # wait_load, wait_store
     @register_primitive_function_decorator
-    @no_type_check
     @script
     def tcgen05_wait_load_():
         attrs.func_name = "cuda_tcgen05_wait_load"
@@ -368,7 +362,6 @@ def register_tcgen05_instructions():
         asm("tcgen05.wait::ld.sync.aligned;", is_volatile=True)
 
     @register_primitive_function_decorator
-    @no_type_check
     @script
     def tcgen05_wait_store_():
         attrs.func_name = "cuda_tcgen05_wait_store"
@@ -393,7 +386,6 @@ def register_tcgen05_instructions():
                 template = f"tcgen05.cp{cta_group.value}{shape_kind.value}{multicast.value} [%0], %1;"
 
                 @register_primitive_function_decorator
-                @no_type_check
                 @script
                 def tcgen05_copy_(taddr: int32, sdesc: uint64):
                     attrs.func_name = resolve_tcgen05_copy(cta_group, shape_kind, multicast)
@@ -411,7 +403,6 @@ def register_tcgen05_instructions():
             cta_mask_type = meta.types(arg_types=[uint16]) if has_mask else meta.types(arg_types=[])
 
             @register_primitive_function_decorator
-            @no_type_check
             @script
             def tcgen05_commit_(mbarrier: int32, cta_mask: cta_mask_type):
                 attrs.func_name = resolve_tcgen05_commit(cta_group, multicast)
@@ -420,7 +411,6 @@ def register_tcgen05_instructions():
 
     # encode_smem_descriptor
     @register_primitive_function_decorator
-    @no_type_check
     @script
     def tcgen05_encode_smem_descriptor(
         smem_addr: uint32,  # 14 bits
@@ -453,7 +443,6 @@ def register_tcgen05_instructions():
             )
 
             @register_primitive_function_decorator
-            @no_type_check
             @script
             def tcgen05_mma_shared_a_(
                 d_tmem: uint32, a_desc: uint64, b_desc: uint64, i_desc: uint32, enable_input_d: uint32
@@ -470,7 +459,6 @@ def register_tcgen05_instructions():
             )
 
             @register_primitive_function_decorator
-            @no_type_check
             @script
             def tcgen05_mma_tmem_a_(
                 d_tmem: uint32, a_tmem: uint32, b_desc: uint64, i_desc: uint32, enable_input_d: uint32

@@ -25,7 +25,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from typing import Dict, List, Sequence
+from typing import Any, Dict, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Var
 from tilus.hidet.ir.func import Function
@@ -33,6 +35,7 @@ from tilus.hidet.ir.node import Node
 from tilus.hidet.ir.type import FuncType
 
 
+@py_class
 class IRModule(Node):
     """
     The intermediate representation of tensor programs.
@@ -40,35 +43,34 @@ class IRModule(Node):
     An IRModule contains one or more functions. It is the basic compilation unit of hidet.
     """
 
-    def __init__(
-        self,
-        functions=None,
-        global_vars=None,
-        namespace="",
-        extern_functions: Dict[str, Var] = None,
-        include_headers: List[str] = None,
-        include_dirs: List[str] = None,
-        linking_dirs: List[str] = None,
-        linking_libs: List[str] = None,
-        object_files: List[str] = None,
-        task: "Task" = None,
-    ):
-        # the functions defined in this module
-        self.functions: Dict[str, Function] = functions if functions else {}
-        # the global variables defined in this module
-        self.global_vars: Dict[str, Var] = global_vars if global_vars else {}
-        # the namespace of the module, all the functions and the global variables will be defined in this namespace
-        self.namespace: str = namespace
-        # the external functions that are used in this module, the Var must have a function type
-        self.extern_functions: Dict[str, Var] = {} if extern_functions is None else extern_functions
-        # '#include ...' preprocessor directives
-        self.include_headers: List[str] = include_headers if include_headers else []
-        # flags that will be passed to the underlying compiler, can be used to add 3rd-party libraries
-        self.include_dirs: List[str] = include_dirs if include_dirs else []  # -L flags
-        self.linking_dirs: List[str] = linking_dirs if linking_dirs else []  # -I flags
-        self.linking_libs: List[str] = linking_libs if linking_libs else []  # -l flags
-        self.object_files: List[str] = object_files if object_files else []  # .o files
-        self.task = task
+    functions: Any = None
+    global_vars: Any = None
+    namespace: str = ""
+    extern_functions: Any = None
+    include_headers: Any = None
+    include_dirs: Any = None
+    linking_dirs: Any = None
+    linking_libs: Any = None
+    object_files: Any = None
+    task: Any = None
+
+    def __post_init__(self):
+        if self.functions is None:
+            self.functions = {}
+        if self.global_vars is None:
+            self.global_vars = {}
+        if self.extern_functions is None:
+            self.extern_functions = {}
+        if self.include_headers is None:
+            self.include_headers = []
+        if self.include_dirs is None:
+            self.include_dirs = []
+        if self.linking_dirs is None:
+            self.linking_dirs = []
+        if self.linking_libs is None:
+            self.linking_libs = []
+        if self.object_files is None:
+            self.object_files = []
 
         assert all(isinstance(func, Function) for func in self.functions.values()) and all(
             isinstance(var, Var) for var in self.global_vars.values()
@@ -79,7 +81,9 @@ class IRModule(Node):
         if name not in self.global_vars:
             func = self.functions[name]
             if isinstance(func, Function):
-                self.global_vars[name] = Var(hint=None, type=FuncType.from_func(func), name=name)
+                updated = dict(self.global_vars)
+                updated[name] = Var(hint=None, type=FuncType.from_func(func), name=name)
+                self.global_vars = updated
             else:
                 raise ValueError()
 
@@ -89,19 +93,21 @@ class IRModule(Node):
         if name in self.functions:
             raise ValueError("Function {} has already existed in module.".format(name))
         else:
-            self.functions[name] = func
+            updated = dict(self.functions)
+            updated[name] = func
+            self.functions = updated
 
     def copy(self):
         return IRModule(
-            functions=self.functions.copy(),
-            global_vars=self.global_vars.copy(),
+            functions=dict(self.functions),
+            global_vars=dict(self.global_vars),
             namespace=self.namespace,
-            extern_functions=self.extern_functions.copy(),
-            include_headers=self.include_headers.copy(),
-            include_dirs=self.include_dirs.copy(),
-            linking_dirs=self.linking_dirs.copy(),
-            linking_libs=self.linking_libs.copy(),
-            object_files=self.object_files.copy(),
+            extern_functions=dict(self.extern_functions),
+            include_headers=list(self.include_headers),
+            include_dirs=list(self.include_dirs),
+            linking_dirs=list(self.linking_dirs),
+            linking_libs=list(self.linking_libs),
+            object_files=list(self.object_files),
             task=self.task,
         )
 
@@ -130,33 +136,46 @@ class IRModule(Node):
 def merge_ir_modules(modules: Sequence[IRModule]) -> IRModule:
     if len(modules) == 0:
         return IRModule()
-    merged = modules[0].copy()
+    first = modules[0]
+    functions = dict(first.functions)
+    global_vars = dict(first.global_vars)
+    extern_functions = dict(first.extern_functions)
+    include_headers = list(first.include_headers)
+    include_dirs = list(first.include_dirs)
+    linking_dirs = list(first.linking_dirs)
+    linking_libs = list(first.linking_libs)
+    object_files = list(first.object_files)
+
     for module in modules[1:]:
-        if module.namespace != merged.namespace:
+        if module.namespace != first.namespace:
             raise ValueError("Cannot merge IRModules with different namespaces")
-        # merge global vars
         for name, var in module.global_vars.items():
-            if name in merged.global_vars:
+            if name in global_vars:
                 raise ValueError("Global variable {} has already existed in module.".format(name))
-            merged.global_vars[name] = var
-        # merge functions
+            global_vars[name] = var
         for name, func in module.functions.items():
-            if name in merged.functions:
+            if name in functions:
                 raise ValueError("Function {} has already existed in module.".format(name))
-            merged.functions[name] = func
-        # merge extern functions
+            functions[name] = func
         for name, var in module.extern_functions.items():
-            if name in merged.extern_functions:
+            if name in extern_functions:
                 continue
-            merged.extern_functions[name] = var
+            extern_functions[name] = var
+        include_headers.extend([h for h in module.include_headers if h not in include_dirs])
+        include_dirs.extend([d for d in module.include_dirs if d not in include_dirs])
+        linking_dirs.extend([d for d in module.linking_dirs if d not in linking_dirs])
+        linking_libs.extend([l for l in module.linking_libs if l not in linking_libs])
+        object_files.extend([f for f in module.object_files if f not in object_files])
 
-        # merge include headers, include_dirs, linking_dirs, linking_libs, object_files
-        merged.include_headers.extend(
-            [header for header in module.include_headers if header not in merged.include_dirs]
-        )
-        merged.include_dirs.extend([dir for dir in module.include_dirs if dir not in merged.include_dirs])
-        merged.linking_dirs.extend([dir for dir in module.linking_dirs if dir not in merged.linking_dirs])
-        merged.linking_libs.extend([lib for lib in module.linking_libs if lib not in merged.linking_libs])
-        merged.object_files.extend([file for file in module.object_files if file not in merged.object_files])
-
-    return merged
+    return IRModule(
+        functions=functions,
+        global_vars=global_vars,
+        namespace=first.namespace,
+        extern_functions=extern_functions,
+        include_headers=include_headers,
+        include_dirs=include_dirs,
+        linking_dirs=linking_dirs,
+        linking_libs=linking_libs,
+        object_files=object_files,
+        task=first.task,
+    )

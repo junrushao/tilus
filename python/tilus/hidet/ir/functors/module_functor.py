@@ -31,14 +31,22 @@ from tilus.hidet.utils import same_list
 from .base_functor import BaseFunctor, BaseRewriter, BaseVisitor
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class ModuleFunctor(BaseFunctor):
+    _type_dispatch = {
+        IRModule: "visit_IRModule",
+        Function: "visit_Function",
+    }
+
     def visit_dispatch(self, node):
-        if isinstance(node, IRModule):
-            return self.visit_IRModule(node)
-        elif isinstance(node, Function):
-            return self.visit_Function(node)
-        else:
-            return NotImplemented
+        method_name = ModuleFunctor._type_dispatch.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
+        return NotImplemented
 
     def visit_IRModule(self, module: IRModule):
         raise NotImplementedError()
@@ -61,19 +69,30 @@ class ModuleVisitor(ModuleFunctor, BaseVisitor):
 
 class ModuleRewriter(ModuleFunctor, BaseRewriter):
     def visit_IRModule(self, module: IRModule):
-        global_vars = self.visit(module.global_vars)
-        functions = self.visit(module.functions)
-        if same_list(global_vars, module.global_vars) and functions is module.functions:
+        orig_global_vars = module.global_vars
+        orig_functions = module.functions
+        global_vars = self.visit(orig_global_vars)
+        functions = self.visit(orig_functions)
+        if same_list(global_vars, orig_global_vars) and _unchanged(functions, orig_functions):
             return module
         else:
             return module.copy().reset_funcs(functions, global_vars)
 
     def visit_Function(self, func: Function):
-        params = self.visit(func.params)
-        ret_type = self.visit(func.ret_type)
-        body = self.visit(func.body)
-        attrs = self.visit(func.attrs)
-        if same_list(params, func.params) and ret_type is func.ret_type and body is func.body and attrs is func.attrs:
+        orig_params = func.params
+        orig_ret_type = func.ret_type
+        orig_body = func.body
+        orig_attrs = func.attrs
+        params = self.visit(orig_params)
+        ret_type = self.visit(orig_ret_type)
+        body = self.visit(orig_body)
+        attrs = self.visit(orig_attrs)
+        if (
+            same_list(params, orig_params)
+            and _unchanged(ret_type, orig_ret_type)
+            and _unchanged(body, orig_body)
+            and _unchanged(attrs, orig_attrs)
+        ):
             return func
         else:
             return Function(func.name, params, body, ret_type, func.kind, attrs)

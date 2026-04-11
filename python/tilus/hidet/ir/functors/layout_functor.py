@@ -24,6 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from tilus.hidet.ir.layout import (
+    ColumnMajorLayout,
     ComposedLayout,
     ConcatLayout,
     DataLayout,
@@ -33,33 +34,38 @@ from tilus.hidet.ir.layout import (
     RowMajorLayout,
     StridesLayout,
     SwizzleLayout,
+    row_major,
 )
 from tilus.hidet.utils import same_list
 
 from .base_functor import BaseFunctor, BaseRewriter, BaseVisitor
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class LayoutFunctor(BaseFunctor):
+    _type_dispatch = {
+        StridesLayout: "visit_StridesLayout",
+        RowMajorLayout: "visit_StridesLayout",
+        ColumnMajorLayout: "visit_StridesLayout",
+        LocalLayout: "visit_LocalLayout",
+        ComposedLayout: "visit_ComposedLayout",
+        SwizzleLayout: "visit_SwizzleLayout",
+        ConcatLayout: "visit_ConcatLayout",
+        PermuteLayout: "visit_PermuteLayout",
+        ReshapeLayout: "visit_ReshapeLayout",
+    }
+
     def visit_dispatch(self, node):
+        method_name = LayoutFunctor._type_dispatch.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
         if isinstance(node, DataLayout):
-            if isinstance(node, StridesLayout):
-                return self.visit_StridesLayout(node)
-            elif isinstance(node, LocalLayout):
-                return self.visit_LocalLayout(node)
-            elif isinstance(node, ComposedLayout):
-                return self.visit_ComposedLayout(node)
-            elif isinstance(node, SwizzleLayout):
-                return self.visit_SwizzleLayout(node)
-            elif isinstance(node, ConcatLayout):
-                return self.visit_ConcatLayout(node)
-            elif isinstance(node, PermuteLayout):
-                return self.visit_PermuteLayout(node)
-            elif isinstance(node, ReshapeLayout):
-                return self.visit_ReshapeLayout(node)
-            else:
-                raise ValueError("Can not recognize layout {}".format(node))
-        else:
-            return NotImplemented
+            raise ValueError("Can not recognize layout {}".format(node))
+        return NotImplemented
 
     def visit_StridesLayout(self, layout: StridesLayout):
         raise NotImplementedError()
@@ -116,55 +122,65 @@ class LayoutVisitor(BaseVisitor, LayoutFunctor):
 
 class LayoutRewriter(BaseRewriter, LayoutFunctor):
     def visit_StridesLayout(self, layout: StridesLayout):
-        shape = self.visit(layout.shape)
-        strides = self.visit(layout.strides)
-        if same_list(shape, layout.shape) and same_list(strides, layout.strides):
+        orig_shape = layout.shape
+        orig_strides = layout.strides
+        shape = self.visit(orig_shape)
+        strides = self.visit(orig_strides)
+        if same_list(shape, orig_shape) and same_list(strides, orig_strides):
             return layout
         else:
             if isinstance(layout, RowMajorLayout):
-                return RowMajorLayout(shape)
-            return StridesLayout(shape, strides)
+                return row_major(*shape)
+            return StridesLayout(shape=shape, strides=strides)
 
     def visit_LocalLayout(self, layout: LocalLayout):
-        shape = self.visit(layout.shape)
-        if same_list(shape, layout.shape):
+        orig_shape = layout.shape
+        shape = self.visit(orig_shape)
+        if same_list(shape, orig_shape):
             return layout
         else:
-            return LocalLayout(shape)
+            return LocalLayout(shape=shape)
 
     def visit_ComposedLayout(self, layout: ComposedLayout):
-        outer = self.visit(layout.outer)
-        inner = self.visit(layout.inner)
-        if outer is layout.outer and inner is layout.inner:
+        orig_outer = layout.outer
+        orig_inner = layout.inner
+        outer = self.visit(orig_outer)
+        inner = self.visit(orig_inner)
+        if _unchanged(outer, orig_outer) and _unchanged(inner, orig_inner):
             return layout
         else:
-            return ComposedLayout(outer, inner)
+            return ComposedLayout(outer=outer, inner=inner)
 
     def visit_SwizzleLayout(self, layout: SwizzleLayout):
-        base = self.visit(layout.base)
-        if base is layout.base:
+        orig_base = layout.base
+        base = self.visit(orig_base)
+        if _unchanged(base, orig_base):
             return layout
         else:
-            return SwizzleLayout(base, layout.dim, layout.regards_dim, layout.log_step)
+            return SwizzleLayout(base=base, dim=layout.dim, regards_dim=layout.regards_dim, log_step=layout.log_step)
 
     def visit_PermuteLayout(self, layout: PermuteLayout):
-        base = self.visit(layout.base)
-        if base is layout.base:
+        orig_base = layout.base
+        base = self.visit(orig_base)
+        if _unchanged(base, orig_base):
             return layout
         else:
-            return PermuteLayout(base, layout.perm)
+            return PermuteLayout(base=base, perm=layout.perm)
 
     def visit_ReshapeLayout(self, layout: ReshapeLayout):
-        base = self.visit(layout.base)
-        if base is layout.base:
+        orig_base = layout.base
+        base = self.visit(orig_base)
+        if _unchanged(base, orig_base):
             return layout
         else:
-            return ReshapeLayout(base, layout.shape)
+            return ReshapeLayout(base=base, shape=layout.shape)
 
     def visit_ConcatLayout(self, layout: ConcatLayout):
-        lhs = self.visit(layout.lhs)
-        rhs = self.visit(layout.rhs)
-        if lhs is layout.lhs and rhs is layout.rhs:
+        orig_lhs = layout.lhs
+        orig_rhs = layout.rhs
+        lhs = self.visit(orig_lhs)
+        rhs = self.visit(orig_rhs)
+        if _unchanged(lhs, orig_lhs) and _unchanged(rhs, orig_rhs):
             return layout
         else:
-            return ConcatLayout(lhs, rhs)
+            return ConcatLayout(lhs=lhs, rhs=rhs)

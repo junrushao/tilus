@@ -27,7 +27,9 @@
 from __future__ import annotations
 
 import itertools
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, convert
 from tilus.hidet.ir.node import Node
@@ -66,20 +68,21 @@ def strides_from_ranks(shape: Sequence[Int], ranks: Sequence[int]) -> List[Int]:
     return strides
 
 
+@py_class
 class TaskMapping(Node):
-    registered = []
+    registered: ClassVar[list] = []
 
-    def __init__(
-        self,
-        num_workers: Int = None,
-        task_shape: Tuple[Int, ...] = None,
-        worker2task: Optional[Callable[[Int], List[Tuple[Int, ...]]]] = None,
-    ):
+    num_workers: Any = None
+    task_shape: Any = None
+    worker2task: Any = None
+
+    def __post_init__(self):
         from tilus.hidet.ir.tools import simplify
 
-        self.num_workers: Int = simplify(num_workers)
-        self.task_shape: Tuple[Int, ...] = tuple(simplify(v) for v in task_shape)
-        self.worker2task: Callable[[Int], List[Tuple[Int]]] = worker2task
+        if self.num_workers is not None:
+            self.num_workers = simplify(self.num_workers)
+        if self.task_shape is not None:
+            self.task_shape = tuple(simplify(v) for v in self.task_shape)
 
     def __call__(self, w: Int) -> List[Tuple[Int, ...]]:
         return self.worker2task(w)
@@ -106,11 +109,11 @@ class TaskMapping(Node):
 
     @staticmethod
     def row_major(task_shape: Sequence[int]):
-        return SpatialTaskMapping(task_shape, ranks=list(range(len(task_shape))))
+        return SpatialTaskMapping(task_shape=task_shape, ranks=list(range(len(task_shape))))
 
     @staticmethod
     def column_major(task_shape: Sequence[int]):
-        return SpatialTaskMapping(task_shape, ranks=list(reversed(range(len(task_shape)))))
+        return SpatialTaskMapping(task_shape=task_shape, ranks=list(reversed(range(len(task_shape)))))
 
     @staticmethod
     def full_layout(task_shape: Sequence[int]):
@@ -127,15 +130,27 @@ class TaskMapping(Node):
         return self * repeat_map(task_shape, ranks, attrs)
 
 
+@py_class
 class RepeatTaskMapping(TaskMapping):
-    def __init__(self, task_shape: Sequence[Int], ranks: Sequence[int], attrs):
+    ranks: Any = None
+    strides: Any = None
+    attrs: Any = None
+
+    def __post_init__(self):
         from tilus.hidet.ir.stmt import ForStmtAttr
         from tilus.hidet.ir.tools import simplify
 
-        super().__init__(num_workers=1, task_shape=tuple(task_shape), worker2task=self._worker2task)
-        self.ranks: List[int] = list(ranks)
-        self.strides: List[Int] = [simplify(v) for v in strides_from_ranks(task_shape, ranks)]
-        self.attrs: List[ForStmtAttr] = list(attrs)
+        self.num_workers = 1
+        if self.ranks is not None:
+            self.ranks = list(self.ranks)
+        if self.task_shape is not None:
+            self.task_shape = tuple(self.task_shape)
+        if self.strides is None and self.task_shape is not None and self.ranks is not None:
+            self.strides = [simplify(v) for v in strides_from_ranks(self.task_shape, self.ranks)]
+        if self.attrs is not None:
+            self.attrs = list(self.attrs)
+        self.worker2task = self._worker2task
+        super().__post_init__()
 
     # noinspection PyUnusedLocal
     def _worker2task(self, w: Int) -> List[Tuple[Int]]:  # pylint: disable=unused-argument
@@ -148,15 +163,24 @@ class RepeatTaskMapping(TaskMapping):
         return list(sorted(tasks, key=key_func))
 
 
+@py_class
 class SpatialTaskMapping(TaskMapping):
-    def __init__(self, task_shape: Sequence[int], ranks: Sequence[int]):
+    ranks: Any = None
+    strides: Any = None
+
+    def __post_init__(self):
         from tilus.hidet.ir.tools import simplify
 
-        super().__init__(num_workers=prod(task_shape), task_shape=tuple(task_shape), worker2task=self._worker2task)
-        self.ranks: List[Int] = list(ranks)
-        self.strides: List[Int] = [simplify(v) for v in strides_from_ranks(task_shape, ranks)]
-
-        assert len(task_shape) == len(ranks)
+        if self.task_shape is not None:
+            self.num_workers = prod(self.task_shape)
+            self.task_shape = tuple(self.task_shape)
+        if self.ranks is not None:
+            self.ranks = list(self.ranks)
+        if self.strides is None and self.task_shape is not None and self.ranks is not None:
+            self.strides = [simplify(v) for v in strides_from_ranks(self.task_shape, self.ranks)]
+        self.worker2task = self._worker2task
+        assert self.task_shape is None or self.ranks is None or len(self.task_shape) == len(self.ranks)
+        super().__post_init__()
 
     def _worker2task(self, w: Int) -> List[Tuple[Int, ...]]:
         task = []
@@ -165,13 +189,19 @@ class SpatialTaskMapping(TaskMapping):
         return [tuple(task)]
 
 
+@py_class
 class ProjectedTaskMapping(TaskMapping):
-    def __init__(self, base: TaskMapping, dim2value: Dict[int, Int]):
-        assert all(int(v) == 0 for v in dim2value.values())
-        task_shape = tuple(base.task_shape[i] if i not in dim2value else 1 for i in range(len(base.task_shape)))
-        super().__init__(num_workers=base.num_workers, task_shape=task_shape, worker2task=self._worker2task)
-        self.base = base
-        self.dim2value: Dict[int, Int] = dim2value
+    base: Any = None
+    dim2value: Any = None
+
+    def __post_init__(self):
+        assert all(int(v) == 0 for v in self.dim2value.values())
+        self.task_shape = tuple(
+            self.base.task_shape[i] if i not in self.dim2value else 1 for i in range(len(self.base.task_shape))
+        )
+        self.num_workers = self.base.num_workers
+        self.worker2task = self._worker2task
+        super().__post_init__()
 
     def _worker2task(self, w: Int) -> List[Tuple[Int, ...]]:
         rank = len(self.task_shape)
@@ -181,17 +211,17 @@ class ProjectedTaskMapping(TaskMapping):
         return projected_tasks
 
 
+@py_class
 class ComposedTaskMapping(TaskMapping):
-    def __init__(self, outer: TaskMapping, inner: TaskMapping):
-        super().__init__(
-            num_workers=outer.num_workers * inner.num_workers,
-            task_shape=tuple(a * b for a, b in zip(outer.task_shape, inner.task_shape)),
-            worker2task=self._worker2task,
-        )
-        self.outer: TaskMapping = outer
-        self.inner: TaskMapping = inner
+    outer: Any = None
+    inner: Any = None
 
-        assert len(outer.task_shape) == len(inner.task_shape)
+    def __post_init__(self):
+        self.num_workers = self.outer.num_workers * self.inner.num_workers
+        self.task_shape = tuple(a * b for a, b in zip(self.outer.task_shape, self.inner.task_shape))
+        self.worker2task = self._worker2task
+        assert len(self.outer.task_shape) == len(self.inner.task_shape)
+        super().__post_init__()
 
     def _worker2task(self, worker_index: Int) -> List[Tuple[Int, ...]]:
         outer_worker_index = worker_index // self.inner.num_workers
@@ -212,7 +242,7 @@ def spatial_map(task_shape: Sequence[Int], ranks: Optional[Sequence[int]] = None
     task_shape = [simplify(v) for v in task_shape]
     if ranks is None:
         ranks = list(range(len(task_shape)))
-    return SpatialTaskMapping(task_shape, ranks)
+    return SpatialTaskMapping(task_shape=task_shape, ranks=ranks)
 
 
 def row_spatial(*task_shape: Int):
@@ -239,7 +269,7 @@ def repeat_map(task_shape: Sequence[Int], ranks: Optional[Sequence[int]] = None,
             attrs = attrs * len(task_shape)
         if len(attrs) != len(task_shape):
             raise ValueError(f"Invalid number of attributes: {len(attrs)} vs {len(task_shape)}")
-    return RepeatTaskMapping(task_shape, ranks, attrs)
+    return RepeatTaskMapping(task_shape=task_shape, ranks=ranks, attrs=attrs)
 
 
 def row_repeat(*task_shape: Int, attrs: Optional[str] = None):
@@ -393,5 +423,5 @@ def list_2_mapping(mapping_list: List[TaskMapping]) -> TaskMapping:
     assert len(mapping_list) != 0
     outer = mapping_list[-1]
     for mapp in reversed(mapping_list[:-1]):
-        outer = ComposedTaskMapping(outer, mapp)
+        outer = ComposedTaskMapping(outer=outer, inner=mapp)
     return outer

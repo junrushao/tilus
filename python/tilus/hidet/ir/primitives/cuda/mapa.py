@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.dtypes import uint32
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.cuda.funcs import call_cuda
@@ -34,7 +32,6 @@ def resolve_mapa_func_name(space: str) -> str:
 def register_mapa_instructions():
     from tilus.hidet.lang import attrs
 
-    @no_type_check
     @script
     def mapa_generic(ptr: void_p, cta_rank: uint32) -> void_p:
         attrs.func_name = "cuda_mapa_generic"
@@ -43,7 +40,6 @@ def register_mapa_instructions():
         asm(template="mapa.u64 %0, %1, %2;", outputs=[ret], inputs=[ptr, cta_rank])
         return ret
 
-    @no_type_check
     @script
     def mapa_shared(ptr: uint32, cta_rank: uint32) -> uint32:
         attrs.func_name = "cuda_mapa_shared"

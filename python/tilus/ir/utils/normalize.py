@@ -14,6 +14,8 @@
 # limitations under the License.
 from typing import Sequence
 
+import tvm_ffi
+
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.tools.simplifier import simplify, simplify_to_int
@@ -42,7 +44,7 @@ def normalize_grid_blocks(blocks: Expr | int | Sequence[Expr | int]) -> tuple[Ex
     if isinstance(blocks, (Expr, int)):
         blocks_x: Expr = simplify(blocks)
         return blocks_x, int32.one, int32.one
-    elif isinstance(blocks, (list, tuple)):
+    elif isinstance(blocks, (list, tuple, tvm_ffi.Array)):
         blocks_expr = [simplify(b) for b in blocks]
         while len(blocks_expr) < 3:
             blocks_expr.append(int32.one)
@@ -71,7 +73,7 @@ def normalize_cluster_blocks(blocks: Expr | int | Sequence[Expr | int]) -> tuple
     """
     if isinstance(blocks, (Expr, int)):
         return simplify_to_int(blocks), 1, 1
-    elif isinstance(blocks, (list, tuple)):
+    elif isinstance(blocks, (list, tuple, tvm_ffi.Array)):
         blocks_int = [simplify_to_int(b) for b in blocks]
         while len(blocks_int) < 3:
             blocks_int.append(1)

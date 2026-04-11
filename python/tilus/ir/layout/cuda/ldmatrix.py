@@ -15,14 +15,16 @@
 from __future__ import annotations
 
 import functools
-from dataclasses import dataclass
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.layout import RegisterLayout
 from tilus.ir.layout.ops import column_spatial, spatial
 
 
-@dataclass(frozen=True, eq=False)
-class LoadMatrixConfig:
+@py_class
+class LoadMatrixConfig(tvm_ffi.Object):
     nbytes: int
     trans: bool
     ldmatrix_layout: RegisterLayout
@@ -38,8 +40,8 @@ class LoadMatrixConfig:
         )
 
 
-@dataclass(frozen=True, eq=False)
-class StoreMatrixConfig:
+@py_class
+class StoreMatrixConfig(tvm_ffi.Object):
     nbytes: int
     trans: bool
     stmatrix_layout: RegisterLayout

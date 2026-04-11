@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # pylint: disable=cell-var-from-loop
-from typing import Union, no_type_check
+from typing import Union
 
 from tilus.hidet.ir.dtypes import boolean
 from tilus.hidet.ir.expr import Expr
@@ -37,7 +37,6 @@ def resolve_mbarrier_wait_name(sem: str, scope: str) -> str:
 
 @initialize()
 def register_mbarrier_primitives():
-    @no_type_check
     @script
     def cuda_mbarrier_init_shared(mbarrier_addr: u32, arrive_count: u32):
         attrs.func_kind = "cuda_internal"
@@ -55,7 +54,6 @@ def register_mbarrier_primitives():
                 func_name = resolve_mbarrier_arrive_name(sem, scope, space)
                 inst = "mbarrier.arrive.{}.{}.shared::{}.b64".format(sem, scope, space)
 
-                @no_type_check
                 @script
                 def cuda_mbarrier_arrive(mbarrier_addr: u32, count: u32):
                     attrs.func_kind = "cuda_internal"
@@ -71,7 +69,6 @@ def register_mbarrier_primitives():
                 func_name = resolve_mbarrier_arrive_expect_tx_name(sem, scope, space)
                 inst = "mbarrier.arrive.expect_tx.{}.{}.shared::{}.b64".format(sem, scope, space)
 
-                @no_type_check
                 @script
                 def cuda_mbarrier_arrive_expect_tx(mbarrier_addr: u32, transaction_bytes: u32):
                     attrs.func_kind = "cuda_internal"
@@ -91,7 +88,6 @@ def register_mbarrier_primitives():
             func_name = resolve_mbarrier_wait_name(sem, scope)
             inst = "mbarrier.try_wait.parity.{}.{}.shared::cta.b64".format(sem, scope)
 
-            @no_type_check
             @script
             def cuda_mbarrier_wait(mbarrier_addr: u32, phase: u32):
                 attrs.func_kind = "cuda_internal"
@@ -107,7 +103,6 @@ def register_mbarrier_primitives():
             register_primitive_function(name=func_name, func_or_type=cuda_mbarrier_wait)
 
     # Legacy primitives (no sem/scope qualifiers) kept for backward compatibility
-    @no_type_check
     @script
     def cuda_mbarrier_wait_shared(mbarrier_addr: u32, phase: u32):
         attrs.func_kind = "cuda_internal"
@@ -119,13 +114,11 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_arrive_shared(mbarrier_addr: u32, count: u32):
         attrs.func_kind = "cuda_internal"
         asm(template="mbarrier.arrive.shared::cta.b64 _, [%0], %1;", inputs=[mbarrier_addr, count], is_volatile=True)
 
-    @no_type_check
     @script
     def cuda_mbarrier_arrive_remote_shared(mbarrier_addr: u32, count: u32, cta_id: u32, pred: u32):
         attrs.func_kind = "cuda_internal"
@@ -136,7 +129,6 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_expect_tx_shared(mbarrier_addr: u32, transaction_bytes: u32):
         attrs.func_kind = "cuda_internal"
@@ -147,7 +139,6 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_expect_tx_remote_shared(mbarrier_addr: u32, transaction_bytes: u32, cta_id: u32, pred: u32):
         attrs.func_kind = "cuda_internal"
@@ -158,7 +149,6 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_arrive_and_expect_tx_shared(mbarrier_addr: u32, transaction_bytes: u32):
         attrs.func_kind = "cuda_internal"
@@ -169,7 +159,6 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_arrive_and_expect_tx_remote_shared(
         mbarrier_addr: u32, transaction_bytes: u32, cta_id: u32, pred: u32
@@ -182,7 +171,6 @@ def register_mbarrier_primitives():
             memory_fence=True,
         )
 
-    @no_type_check
     @script
     def cuda_mbarrier_sync(mbarrier_addr: u32):
         attrs.func_kind = "cuda_internal"

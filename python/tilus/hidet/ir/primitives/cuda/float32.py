@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -40,7 +38,6 @@ def register_functions():
 
         template = "ex2.approx{ftz}.f32 %0, %1;".format(ftz=".ftz" if ftz else "")
 
-        @no_type_check
         @script
         def f32_ex2(a: f32) -> f32:
             attrs.func_kind = "cuda_internal"
@@ -63,7 +60,6 @@ def register_functions():
                 ftz=".ftz" if ftz else "",
             )
 
-            @no_type_check
             @script
             def f32_mul(a: f32, b: f32) -> f32:
                 attrs.func_kind = "cuda_internal"

@@ -24,7 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # pylint: disable=line-too-long
-from typing import Optional, no_type_check
+from typing import Optional
 
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr
@@ -87,7 +87,6 @@ def register_cp_async():
 
                     func_name = "cuda_" + resolve_name_cp_async(False, cp_size, cache_level, evict, prefetch_bytes)
 
-                    @no_type_check
                     @script
                     def cuda_cp_async(generic_dst: void_p, src: void_p, src_size: i32):
                         attrs.func_name = func_name
@@ -100,7 +99,6 @@ def register_cp_async():
 
                     func_name = "cuda_" + resolve_name_cp_async(True, cp_size, cache_level, evict, prefetch_bytes)
 
-                    @no_type_check
                     @script
                     def cuda_cp_async(shared_dst: int32, src: void_p, src_size: i32):
                         attrs.func_name = func_name
@@ -115,7 +113,6 @@ def register_cp_async():
 def register_cp_async_commit_group():
     from tilus.hidet.lang import attrs, script
 
-    @no_type_check
     @script
     def cuda_cp_async_commit_group():
         attrs.func_name = "cuda_cp_async_commit_group"
@@ -133,7 +130,6 @@ def register_cp_async_wait_group():
     for groups in range(10):
         func_name = "cuda_cp_async_wait_group_{}".format(groups)
 
-        @no_type_check
         @script
         def cuda_cp_async_wait_group():
             attrs.func_name = func_name
@@ -148,7 +144,6 @@ def register_cp_async_wait_group():
 def register_cp_async_wait_all():
     from tilus.hidet.lang import attrs, script
 
-    @no_type_check
     @script
     def cuda_cp_async_wait_all():
         attrs.func_name = "cuda_cp_async_wait_all"

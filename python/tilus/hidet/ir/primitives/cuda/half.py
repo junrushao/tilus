@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
@@ -39,7 +37,6 @@ def register_functions():
 
         asm("fma.rn.f16x2 %0, %1, %2, %3;", outputs=[cast(d, ~uint32)[0]], inputs=[a, b, c], is_volatile=True)
 
-    @no_type_check
     @script
     def mul_f16x2_(d: void_p, a: uint32, b: uint32):
         attrs.func_kind = "cuda_internal"

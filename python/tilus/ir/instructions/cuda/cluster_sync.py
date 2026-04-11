@@ -14,12 +14,12 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.inst import Instruction
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ClusterSyncThreadsInst(Instruction):
     @staticmethod
     def create() -> ClusterSyncThreadsInst:

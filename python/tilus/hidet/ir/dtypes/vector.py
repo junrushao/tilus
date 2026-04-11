@@ -25,6 +25,9 @@
 # limitations under the License.
 from typing import Any, Sequence
 
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
+
 from tilus.hidet.ir.type import DataType
 
 from .boolean import boolean
@@ -33,19 +36,10 @@ from .integer import int8, uint8, uint32
 from .integer_subbyte import int4b, uint4b
 
 
+@py_class
 class VectorType(DataType):
-    def __init__(self, lane_type: DataType, num_lanes: int):
-        name = "{}x{}".format(lane_type.name, num_lanes)
-        short_name = "{}x{}".format(lane_type.short_name, num_lanes)
-        nbytes = (
-            lane_type.nbytes * num_lanes if not lane_type.is_integer_subbyte() else lane_type.nbits * num_lanes // 8
-        )
-        super().__init__(name, short_name, nbytes)
-        self._num_lanes: int = num_lanes
-        self._lane_type: DataType = lane_type
-
-        if lane_type.is_vector():
-            raise ValueError("Cannot create a vector type of vectors")
+    _num_lanes: int
+    _lane_type: Any  # DataType
 
     def is_float(self) -> bool:
         return False
@@ -92,53 +86,68 @@ class VectorType(DataType):
         return self.constant([self.lane_type.max_value] * self.num_lanes)
 
 
-int8x4 = VectorType(int8, 4)
+def _make_vector_type(lane_type: DataType, num_lanes: int) -> VectorType:
+    if lane_type.is_vector():
+        raise ValueError("Cannot create a vector type of vectors")
+    name = "{}x{}".format(lane_type.name, num_lanes)
+    short_name = "{}x{}".format(lane_type.short_name, num_lanes)
+    nbytes = lane_type.nbytes * num_lanes if not lane_type.is_integer_subbyte() else lane_type.nbits * num_lanes // 8
+    return VectorType(
+        _name=name,
+        _short_name=short_name,
+        _nbytes=nbytes,
+        _num_lanes=num_lanes,
+        _lane_type=lane_type,
+    )
+
+
+int8x4 = _make_vector_type(int8, 4)
 i8x4 = int8x4
 
-uint8x4 = VectorType(uint8, 4)
+uint8x4 = _make_vector_type(uint8, 4)
 u8x4 = uint8x4
 
-float32x1 = VectorType(float32, 1)
+float32x1 = _make_vector_type(float32, 1)
 f32x1 = float32x1
 
-float32x2 = VectorType(float32, 2)
+float32x2 = _make_vector_type(float32, 2)
 f32x2 = float32x2
 
-float32x4 = VectorType(float32, 4)
+float32x4 = _make_vector_type(float32, 4)
 f32x4 = float32x4
 
-float32x8 = VectorType(float32, 8)
+float32x8 = _make_vector_type(float32, 8)
 f32x8 = float32x8
 
-float16x1 = VectorType(float16, 1)
+float16x1 = _make_vector_type(float16, 1)
 f16x1 = float16x1
 
-float16x2 = VectorType(float16, 2)
+float16x2 = _make_vector_type(float16, 2)
 f16x2 = float16x2
 
-float16x4 = VectorType(float16, 4)
+float16x4 = _make_vector_type(float16, 4)
 f16x4 = float16x4
 
-float16x8 = VectorType(float16, 8)
+float16x8 = _make_vector_type(float16, 8)
 f16x8 = float16x8
 
-int4bx2 = VectorType(int4b, 2)
+int4bx2 = _make_vector_type(int4b, 2)
 i4x2 = int4bx2
 
-uint4bx2 = VectorType(uint4b, 2)
+uint4bx2 = _make_vector_type(uint4b, 2)
 u4x2 = uint4bx2
 
-int4bx8 = VectorType(int4b, 8)
+int4bx8 = _make_vector_type(int4b, 8)
 i4x8 = int4bx8
 
-uint4bx8 = VectorType(uint4b, 8)
+uint4bx8 = _make_vector_type(uint4b, 8)
 u4x8 = uint4bx8
 
-bfloat16x2 = VectorType(bfloat16, 2)
+bfloat16x2 = _make_vector_type(bfloat16, 2)
 
-uint32x1 = VectorType(uint32, 1)
-uint32x2 = VectorType(uint32, 2)
-uint32x4 = VectorType(uint32, 4)
+uint32x1 = _make_vector_type(uint32, 1)
+uint32x2 = _make_vector_type(uint32, 2)
+uint32x4 = _make_vector_type(uint32, 4)
 
 
 def vectorize(base_dtype: DataType, num_lanes: int) -> VectorType:

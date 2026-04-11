@@ -74,9 +74,9 @@ class AddExplicitCastRewriter(IRRewriter):
                 func_var=stmt.func_var,
                 args=args,
                 grid_dim=stmt.grid_dim,
-                block_dim=stmt.block_dim,
                 cluster_dim=stmt.cluster_dim,
-                shared_mem=stmt.shared_mem_bytes,
+                block_dim=stmt.block_dim,
+                shared_mem_bytes=stmt.shared_mem_bytes,
                 target=stmt.target,
             )
 

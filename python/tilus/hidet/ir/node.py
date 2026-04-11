@@ -23,9 +23,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 
-class Node:
+@py_class
+class Node(tvm_ffi.Object):
     def __str__(self):
         from tilus.hidet.ir.tools.printer import astext  # pylint: disable=import-outside-toplevel
 

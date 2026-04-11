@@ -270,7 +270,7 @@ def _is_immutable(obj):
 
 
 def same_list(lhs, rhs, use_equal=False):
-    """Check whether two lists are element-wise identical (by ``is``) or equal."""
+    """Check whether two lists are element-wise identical (by ``is`` or ``same_as``) or equal."""
     if len(lhs) != len(rhs):
         return False
     for l, r in zip(lhs, rhs):
@@ -278,8 +278,16 @@ def same_list(lhs, rhs, use_equal=False):
             if l != r:
                 return False
         else:
+            # Use same_as for tvm_ffi Objects (handle-based identity) since
+            # py_class fields return different Python wrappers for the same handle.
             if l is not r:
-                return False
+                import tvm_ffi as _tvm_ffi
+
+                if isinstance(l, _tvm_ffi.Object) and isinstance(r, _tvm_ffi.Object):
+                    if not l.same_as(r):
+                        return False
+                else:
+                    return False
     return True
 
 
@@ -316,13 +324,13 @@ def str_indent(msg: str, indent: int = 0) -> str:
 
 
 def repeat_until_converge(func, obj, limit=None):
-    """Repeatedly apply *func* to *obj* until the result stops changing (identity check)."""
+    """Repeatedly apply *func* to *obj* until the result stops changing (identity or same_as check)."""
     i = 0
     while True:
         i += 1
         orig_obj = obj
         obj = func(obj)
-        if obj is orig_obj:
+        if obj is orig_obj or (hasattr(obj, "same_as") and obj.same_as(orig_obj)):
             return obj
         if limit is not None and i >= limit:
             return obj

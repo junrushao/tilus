@@ -145,7 +145,9 @@ def encode_tensor_map(
         + r"""{{cudaError_t err = cudaGetLastError(); if (err != cudaSuccess) TVM_FFI_THROW(RuntimeError) << "CUDA error: " << cudaGetErrorString(err) << "\n";}}"""
     )
 
-    return BlackBoxStmt(template_string, tensor_map, rank, tensor_ptr, shape, strides, box_shape, elem_strides)
+    return BlackBoxStmt(
+        template_string=template_string, exprs=(tensor_map, rank, tensor_ptr, shape, strides, box_shape, elem_strides)
+    )
 
 
 def create_tensor_map(
@@ -273,4 +275,6 @@ cuTensorMapEncodeTiled(
 );
     """
 
-    return BlackBoxStmt(template_string, tensor_map, rank, tensor_ptr, size, stride, box_size, elem_stride)
+    return BlackBoxStmt(
+        template_string=template_string, exprs=(tensor_map, rank, tensor_ptr, size, stride, box_size, elem_stride)
+    )

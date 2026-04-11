@@ -147,7 +147,7 @@ def register_copy_tensor_nd():
     from tilus.hidet.ir.primitives.cuda.cvta import cvta_generic_to_shared
     from tilus.hidet.lang import attrs, i32, script, u16, u64
 
-    tensor_map_type = OpaqueType("CUtensorMap", "const")
+    tensor_map_type = OpaqueType("CUtensorMap", ("const",))
 
     # G2S
     # multicast

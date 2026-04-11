@@ -14,8 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Constant, Expr
 from tilus.hidet.ir.type import DataType
@@ -23,7 +24,7 @@ from tilus.ir.inst import Instruction, InstructionError
 from tilus.ir.tensor import RegisterTensor, SharedTensor, TMemoryTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05AllocInst(Instruction):
     cta_group: int  # 1 or 2
 
@@ -35,14 +36,14 @@ class Tcgen05AllocInst(Instruction):
         return Tcgen05AllocInst(output=output, inputs=(), cta_group=cta_group)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05DeallocInst(Instruction):
     @staticmethod
     def create(tmt: TMemoryTensor) -> Tcgen05DeallocInst:
         return Tcgen05DeallocInst(output=None, inputs=(tmt,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05RelinquishAllocPermitInst(Instruction):
     cta_group: int = 1
 
@@ -51,7 +52,7 @@ class Tcgen05RelinquishAllocPermitInst(Instruction):
         return Tcgen05RelinquishAllocPermitInst(output=None, inputs=(), cta_group=cta_group)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05SliceInst(Instruction):
     offsets: tuple[Expr, ...]
     slice_dims: tuple[int, ...]
@@ -73,7 +74,7 @@ class Tcgen05SliceInst(Instruction):
         return Tcgen05SliceInst(output=output, inputs=(tmem,), offsets=tuple(offsets), slice_dims=tuple(slice_dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05ViewInst(Instruction):
     @staticmethod
     def create(tmem: TMemoryTensor, dtype: DataType, shape: Sequence[int]) -> Tcgen05ViewInst:
@@ -89,7 +90,7 @@ class Tcgen05ViewInst(Instruction):
         return Tcgen05ViewInst(output=output, inputs=(tmem,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05LoadInst(Instruction):
     @staticmethod
     def create(tmem: TMemoryTensor) -> Tcgen05LoadInst:
@@ -98,7 +99,7 @@ class Tcgen05LoadInst(Instruction):
         return Tcgen05LoadInst(output=output, inputs=(tmem,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05StoreInst(Instruction):
     @staticmethod
     def create(tmem: TMemoryTensor, src: RegisterTensor) -> Tcgen05StoreInst:
@@ -106,7 +107,7 @@ class Tcgen05StoreInst(Instruction):
         return Tcgen05StoreInst(output=None, inputs=(tmem, src))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05WaitInst(Instruction):
     wait_load: bool
     wait_store: bool
@@ -116,7 +117,7 @@ class Tcgen05WaitInst(Instruction):
         return Tcgen05WaitInst(output=None, inputs=(), wait_load=wait_load, wait_store=wait_store)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05CopyInst(Instruction):
     @staticmethod
     def create(src: SharedTensor, dst: TMemoryTensor) -> Tcgen05CopyInst:
@@ -124,7 +125,7 @@ class Tcgen05CopyInst(Instruction):
         return Tcgen05CopyInst(output=None, inputs=(dst, src))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05CommitInst(Instruction):
     mbarrier: Expr
     cta_group: int
@@ -138,7 +139,7 @@ class Tcgen05CommitInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05MmaSSInst(Instruction):
     enable_input_d: Expr
     cta_group: int
@@ -157,7 +158,7 @@ class Tcgen05MmaSSInst(Instruction):
         return Tcgen05MmaSSInst(output=None, inputs=(a, b, d), enable_input_d=enable_input_d, cta_group=cta_group)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Tcgen05MmaTSInst(Instruction):
     enable_input_d: Expr
     cta_group: int

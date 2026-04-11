@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.primitives.cuda.funcs import call_cuda
 from tilus.hidet.ir.primitives.func import register_primitive_function
@@ -29,7 +27,6 @@ def register_warp_uniform_primitives():
     # elect.sync -- elect one thread per warp
     elect_func_name = "cuda_elect_sync"
 
-    @no_type_check
     @script
     def elect_sync(membermask: u32) -> u32:
         """Returns 1 for exactly one elected thread in the warp, 0 for all others.
@@ -51,7 +48,6 @@ def register_warp_uniform_primitives():
     # shfl.sync with fixed i32 types
     shfl_func_name = "cuda_shfl_sync_i32"
 
-    @no_type_check
     @script
     def shfl_sync_i32(mask: u32, val: i32, src_lane: i32) -> i32:
         """Broadcast src_lane's value of val to all threads in the warp.

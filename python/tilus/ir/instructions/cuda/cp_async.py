@@ -14,15 +14,16 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Callable, Optional, Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var, as_expr, index_vars
 from tilus.ir.inst import Instruction
 from tilus.ir.tensor import GlobalTensor, SharedTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: Optional[tuple[int, ...]]
@@ -53,10 +54,10 @@ class CopyAsyncInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncGenericInst(Instruction):
     ptr: Var
-    axes: list[Var]
+    axes: tuple[Var, ...]
     offset: Expr
     mask: Optional[Expr]
     evict: Optional[str]
@@ -77,14 +78,14 @@ class CopyAsyncGenericInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncCommitGroupInst(Instruction):
     @staticmethod
     def create() -> CopyAsyncCommitGroupInst:
         return CopyAsyncCommitGroupInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncWaitGroupInst(Instruction):
     n: Expr
 
@@ -93,7 +94,7 @@ class CopyAsyncWaitGroupInst(Instruction):
         return CopyAsyncWaitGroupInst(output=None, inputs=(), n=n)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CopyAsyncWaitAllInst(Instruction):
     @staticmethod
     def create() -> CopyAsyncWaitAllInst:

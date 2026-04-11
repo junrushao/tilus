@@ -14,7 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr
@@ -22,7 +24,7 @@ from tilus.ir.inst import Instruction
 from tilus.ir.tensor import RegisterTensor, SharedTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ClusterLaunchControlTryCancelInst(Instruction):
     mbarrier: Expr
     multicast: Expr
@@ -34,7 +36,7 @@ class ClusterLaunchControlTryCancelInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ClusterLaunchControlQueryResponseInst(Instruction):
     @staticmethod
     def create(response: SharedTensor) -> ClusterLaunchControlQueryResponseInst:

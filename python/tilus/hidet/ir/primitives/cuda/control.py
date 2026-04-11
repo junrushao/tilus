@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.func import Function
 from tilus.hidet.ir.primitives.func import call_primitive_func, register_primitive_function
 from tilus.hidet.utils import initialize
@@ -23,7 +21,6 @@ from tilus.hidet.utils import initialize
 def register_functions():
     from tilus.hidet.lang import asm, attrs, script  # pylint: disable=import-outside-toplevel
 
-    @no_type_check
     @script
     def exit_primitive():
         attrs.func_kind = "cuda_internal"

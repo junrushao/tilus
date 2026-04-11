@@ -26,6 +26,8 @@
 # pylint: disable=unused-variable
 from typing import Dict, List, Tuple, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.builders import StmtBuilder
 from tilus.hidet.ir.dtypes import boolean, i32
 from tilus.hidet.ir.expr import Add, Address, Cast, Constant, Expr, TensorElement, Var, bitwise_not, cast, var
@@ -308,7 +310,7 @@ class LowerIntegerSubbyteRewriter(IRRewriter):
 
     def _subbyte_pointer_add(self, dtype: DataType, ptr: Union[Expr, Tuple[Expr]], offset: Expr):
         divisor = self._get_divisor(dtype)
-        if isinstance(ptr, tuple):
+        if isinstance(ptr, (tuple, tvm_ffi.Array)):
             ptr, offset_ = ptr
             offset = offset + offset_
         if self.recursive_depth == 0:

@@ -14,30 +14,31 @@
 # limitations under the License.
 from __future__ import annotations
 
-import dataclasses
-from dataclasses import dataclass
 from typing import Callable, ClassVar, Optional, Sequence, Union
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir import primitives
 from tilus.hidet.ir.dtypes import DataType, boolean, i32
 from tilus.hidet.ir.expr import Expr, Var, as_expr, index_vars
 from tilus.hidet.ir.tools import rewrite
+from tilus.ir._replace import replace
 from tilus.ir.inst import Instruction
 from tilus.ir.layout import RegisterLayout
 from tilus.ir.tensor import GlobalTensor, RegisterTensor, SharedTensor, Tensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AssignInst(Instruction):
     @staticmethod
     def create(dst: RegisterTensor, src: RegisterTensor) -> AssignInst:
         return AssignInst(output=None, inputs=(dst, src))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SliceAssignInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: Optional[tuple[int, ...]]
+    dims: tuple[int, ...]
 
     @staticmethod
     def create(
@@ -51,7 +52,7 @@ class SliceAssignInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AllocateRegisterInst(Instruction):
     axes: Optional[tuple[Var, ...]]
     init: Optional[Expr]
@@ -67,7 +68,7 @@ class AllocateRegisterInst(Instruction):
         return AllocateRegisterInst(output=output, inputs=tuple(), axes=axes, init=init)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class LoadGlobalInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: tuple[int, ...]
@@ -77,7 +78,7 @@ class LoadGlobalInst(Instruction):
         return LoadGlobalInst(output=output, inputs=(x,), offsets=tuple(offsets), dims=tuple(dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class StoreGlobalInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: tuple[int, ...]
@@ -87,7 +88,7 @@ class StoreGlobalInst(Instruction):
         return StoreGlobalInst(output=None, inputs=(dst, x), offsets=tuple(offsets), dims=tuple(dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SliceGlobalInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: Optional[tuple[int, ...]]
@@ -110,24 +111,24 @@ class SliceGlobalInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class LoadSharedInst(Instruction):
     @staticmethod
     def create(x: SharedTensor, output: RegisterTensor) -> LoadSharedInst:
         return LoadSharedInst(output=output, inputs=(x,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class StoreSharedInst(Instruction):
     @staticmethod
     def create(dst: SharedTensor, src: RegisterTensor) -> StoreSharedInst:
         return StoreSharedInst(output=None, inputs=(dst, src))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SliceSharedInst(Instruction):
     offsets: tuple[Expr, ...]
-    dims: Optional[tuple[int, ...]]
+    dims: tuple[int, ...]
 
     @staticmethod
     def create(
@@ -145,7 +146,7 @@ class SliceSharedInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class LoadGlobalGenericInst(Instruction):
     ptr: Var
     axes: tuple[Var, ...]
@@ -165,7 +166,7 @@ class LoadGlobalGenericInst(Instruction):
         return LoadGlobalGenericInst(output=output, inputs=tuple(), ptr=ptr, axes=axes, offset=offset, mask=mask)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class StoreGlobalGenericInst(Instruction):
     ptr: Var
     axes: tuple[Var, ...]
@@ -185,7 +186,7 @@ class StoreGlobalGenericInst(Instruction):
         return StoreGlobalGenericInst(output=None, inputs=(x,), ptr=ptr, axes=axes, offset=offset, mask=mask)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SliceRegisterInst(Instruction):
     offsets: tuple[Expr, ...]
     dims: Optional[tuple[int, ...]]
@@ -206,7 +207,7 @@ class SliceRegisterInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class CastInst(Instruction):
     @staticmethod
     def create(
@@ -216,13 +217,13 @@ class CastInst(Instruction):
         return CastInst(output=output, inputs=(x,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ElementwiseUnaryBaseInst(Instruction):
     def f_compute(self, arg: Var) -> Expr:
         raise NotImplementedError("f_compute should be implemented in subclasses")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ElementwiseUnaryInst(ElementwiseUnaryBaseInst):
     arg: Var
     value: Expr
@@ -237,7 +238,7 @@ class ElementwiseUnaryInst(ElementwiseUnaryBaseInst):
         return rewrite(self.value, {self.arg: arg})
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class NegInst(ElementwiseUnaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, output: RegisterTensor) -> NegInst:
@@ -247,7 +248,7 @@ class NegInst(ElementwiseUnaryBaseInst):
         return -arg
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AbsInst(ElementwiseUnaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, output: RegisterTensor) -> AbsInst:
@@ -257,7 +258,7 @@ class AbsInst(ElementwiseUnaryBaseInst):
         return primitives.abs(arg)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ClipInst(ElementwiseUnaryBaseInst):
     min: Expr
     max: Expr
@@ -272,15 +273,15 @@ class ClipInst(ElementwiseUnaryBaseInst):
         return primitives.min(primitives.max(arg, self.min), self.max)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ElementwiseBinaryBaseInst(Instruction):
     def f_compute(self, lhs: Var, rhs: Var) -> Expr:
         raise NotImplementedError("f_compute should be implemented in subclasses")
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ElementwiseBinaryInst(ElementwiseBinaryBaseInst):
-    args: tuple[Var, Var]
+    args: tuple[Var, ...]
     value: Expr
 
     @staticmethod
@@ -296,7 +297,7 @@ class ElementwiseBinaryInst(ElementwiseBinaryBaseInst):
         return rewrite(self.value, {self.args[0]: lhs, self.args[1]: rhs})
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AddInst(ElementwiseBinaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> AddInst:
@@ -306,7 +307,7 @@ class AddInst(ElementwiseBinaryBaseInst):
         return lhs + rhs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SubInst(ElementwiseBinaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> SubInst:
@@ -316,7 +317,7 @@ class SubInst(ElementwiseBinaryBaseInst):
         return lhs - rhs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class MulInst(ElementwiseBinaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> MulInst:
@@ -326,7 +327,7 @@ class MulInst(ElementwiseBinaryBaseInst):
         return lhs * rhs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class DivInst(ElementwiseBinaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> DivInst:
@@ -336,7 +337,7 @@ class DivInst(ElementwiseBinaryBaseInst):
         return lhs / rhs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ModInst(ElementwiseBinaryBaseInst):
     @staticmethod
     def create(x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> ModInst:
@@ -346,28 +347,28 @@ class ModInst(ElementwiseBinaryBaseInst):
         return lhs % rhs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class WhereInst(Instruction):
     @staticmethod
     def create(cond: RegisterTensor, x: RegisterTensor, y: RegisterTensor, output: RegisterTensor) -> WhereInst:
         return WhereInst(output=output, inputs=(cond, x, y))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class RepeatInst(Instruction):
     @staticmethod
     def create(x: RegisterTensor, output: RegisterTensor) -> RepeatInst:
         return RepeatInst(output=output, inputs=(x,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class RepeatInterleaveInst(Instruction):
     @staticmethod
     def create(x: RegisterTensor, output: RegisterTensor) -> RepeatInterleaveInst:
         return RepeatInterleaveInst(output=output, inputs=(x,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class FormatPrintInst(Instruction):
     cond: Expr
     fstring: str
@@ -379,7 +380,7 @@ class FormatPrintInst(Instruction):
         return FormatPrintInst(output=None, inputs=(), cond=cond, fstring=fstring, expressions=tuple(expressions))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class PrintTensorInst(Instruction):
     cond: Expr
     msg: str
@@ -390,24 +391,24 @@ class PrintTensorInst(Instruction):
         return PrintTensorInst(output=None, inputs=(x,), cond=cond, msg=msg, fmt=fmt)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ShuffleBaseInst(Instruction):
     mask: int
     delta: int
     width: int
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ShuffleDownInst(ShuffleBaseInst):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ShuffleUpInst(ShuffleBaseInst):
     pass
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ReduceInst(Instruction):
     dim: int
     op: str
@@ -426,7 +427,7 @@ class ReduceInst(Instruction):
         return ReduceInst(output=output, inputs=(x,), dim=dim, keepdim=keepdim, op=op)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ViewInst(Instruction):
     local_offset: Expr
 
@@ -444,7 +445,7 @@ class ViewInst(Instruction):
         return ViewInst(output=output, inputs=(x,), local_offset=i32(local_offset))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SqueezeInst(Instruction):
     dims: tuple[int, ...]
 
@@ -467,7 +468,7 @@ class SqueezeInst(Instruction):
         return SqueezeInst(output=out, inputs=(x,), dims=tuple(dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class UnsqueezeInst(Instruction):
     dims: tuple[int, ...]
 
@@ -493,7 +494,7 @@ class UnsqueezeInst(Instruction):
         return UnsqueezeInst(output=out, inputs=(x,), dims=tuple(dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class TransposeInst(Instruction):
     @staticmethod
     def create(x: RegisterTensor, out: Optional[RegisterTensor] = None) -> TransposeInst:
@@ -503,14 +504,14 @@ class TransposeInst(Instruction):
         return TransposeInst(output=out, inputs=(x,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AllocateSharedInst(Instruction):
     @staticmethod
     def create(output: SharedTensor) -> AllocateSharedInst:
         return AllocateSharedInst(output=output, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class AllocateGlobalInst(Instruction):
     require_clean: bool
 
@@ -519,10 +520,10 @@ class AllocateGlobalInst(Instruction):
         return AllocateGlobalInst(output=output, inputs=(), require_clean=require_clean)
 
     def with_output(self, global_output: GlobalTensor) -> AllocateGlobalInst:
-        return dataclasses.replace(self, output=global_output)  # type: ignore[call-arg]
+        return replace(self, output=global_output)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class GlobalViewInst(Instruction):
     ptr: Expr
 
@@ -531,14 +532,14 @@ class GlobalViewInst(Instruction):
         return GlobalViewInst(output=output, inputs=(), ptr=ptr)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class FreeSharedInst(Instruction):
     @staticmethod
     def create(tensor: SharedTensor) -> FreeSharedInst:
         return FreeSharedInst(output=None, inputs=(tensor,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ReshapeSharedInst(Instruction):
     @staticmethod
     def create(tensor: SharedTensor, shape: Sequence[int]) -> ReshapeSharedInst:
@@ -546,7 +547,7 @@ class ReshapeSharedInst(Instruction):
         return ReshapeSharedInst(output=output, inputs=(tensor,))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class PermuteSharedInst(Instruction):
     dims: tuple[int, ...]
 
@@ -557,14 +558,14 @@ class PermuteSharedInst(Instruction):
         return PermuteSharedInst(output=out, inputs=(x,), dims=tuple(dims))
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SyncThreadsInst(Instruction):
     @staticmethod
     def create() -> SyncThreadsInst:
         return SyncThreadsInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SyncReduceThreadsInst(Instruction):
     AND: ClassVar[str] = "and"
     OR: ClassVar[str] = "or"
@@ -578,14 +579,14 @@ class SyncReduceThreadsInst(Instruction):
         return SyncReduceThreadsInst(output=None, inputs=(), reduce_op=reduce_op, var=var, reduce_value=reduce_value)
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class ExitInst(Instruction):
     @staticmethod
     def create() -> ExitInst:
         return ExitInst(output=None, inputs=())
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class NopInst(Instruction):
     @staticmethod
     def create() -> NopInst:

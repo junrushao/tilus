@@ -14,19 +14,20 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.inst import Instruction
 from tilus.ir.tensor import RegisterTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class SimtDotInst(Instruction):
-    warp_spatial: tuple[int, int, int]
-    warp_repeat: tuple[int, int, int]
-    thread_spatial: tuple[int, int]
-    thread_repeat: tuple[int, int]
+    warp_spatial: tuple[int, ...]
+    warp_repeat: tuple[int, ...]
+    thread_spatial: tuple[int, ...]
+    thread_repeat: tuple[int, ...]
 
     @staticmethod
     def create(

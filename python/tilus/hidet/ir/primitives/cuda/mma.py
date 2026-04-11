@@ -364,7 +364,7 @@ def register_mma_instructions():
             fb += AssignStmt(ra, cast(a, ra.type))
             fb += AssignStmt(rb, cast(b, rb.type))
             fb += AssignStmt(rc, cast(c, rc.type))
-            fb += AsmStmt(
+            fb += AsmStmt.from_pairs(
                 template_string=template_string,
                 outputs=[("+r", rc[i]) for i in range(c_regs)],
                 inputs=[("r", ra[i]) for i in range(a_regs)] + [("r", rb[i]) for i in range(b_regs)],
@@ -596,7 +596,7 @@ def ldmatrix(regs: List[Expr], smem_addr: Expr, shared_space_addr: bool = False,
 # ---------------------------------------------------------------------------
 # mma_sync_v2 (from extensions) - pointer-based MMA variant
 # ---------------------------------------------------------------------------
-from typing import Sequence, no_type_check
+from typing import Sequence
 
 from tilus.hidet.ir.expr import deref
 
@@ -628,7 +628,6 @@ def register_mma_v2_instructions():
         c_reg_p_type = meta.types([void_p for _ in range(c_regs)])
         d_reg_p_type = meta.types([void_p for _ in range(d_regs)])
 
-        @no_type_check
         @script
         def mma_sync_v2_primitive(
             d_reg_p: d_reg_p_type, a_reg_p: a_reg_p_type, b_reg_p: b_reg_p_type, c_reg_p: c_reg_p_type

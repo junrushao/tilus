@@ -22,9 +22,18 @@ from tilus.hidet.ir.type import FuncType
 
 
 def write_function_types(ir_module, output_dir):
-    """Write function types for public functions in the IR module."""
-    func_types: Dict[str, FuncType] = {
-        func.name: FuncType.from_func(func) for func in ir_module.functions.values() if func.kind == "public"
-    }
+    """Write function types for public functions in the IR module.
+
+    Serializes function type info as plain Python dicts (param names + types as strings)
+    since tvm_ffi py_class objects cannot be pickled.
+    """
+    func_types = {}
+    for func in ir_module.functions.values():
+        if func.kind == "public":
+            func_types[func.name] = {
+                "param_names": [p.hint or p.name or str(i) for i, p in enumerate(func.params)],
+                "param_types": [str(p.type) for p in func.params],
+                "ret_type": str(func.ret_type),
+            }
     with open(os.path.join(output_dir, "func_types.pickle"), "wb") as f:
         pickle.dump(func_types, f)

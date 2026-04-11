@@ -26,6 +26,9 @@
 import operator
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
+
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import (
     Add,
@@ -321,10 +324,12 @@ def simplify_to_int(node: Union[Expr, int], *, instantiate_symbols=False, repeat
 # --- Extra simplification utilities (merged from tilus extensions) ---
 
 
+@py_class
 class Sum(Expr):
-    def __init__(self, terms: list[Expr]):
-        assert len(terms) >= 1
-        self.terms: list[Expr] = terms
+    terms: Any
+
+    def __post_init__(self):
+        assert len(self.terms) >= 1
 
 
 class ExprRewriterWithSum(ExprRewriter):
@@ -395,7 +400,7 @@ class MergeTermSimplifier(ExprRewriterWithSum):
     def decompose_linear_term(self, term: Expr) -> Optional[tuple[Constant, Var]]:
         if isinstance(term, Var):
             if isinstance(term.type, DataType):
-                return Constant(value=1, const_type=term.type), term
+                return Constant(value=1, type=term.type), term
         elif isinstance(term, Multiply):
             if isinstance(term.a, Constant) and isinstance(term.b, Var):
                 return term.a, term.b
@@ -422,7 +427,7 @@ class MergeTermSimplifier(ExprRewriterWithSum):
                 if x1 is x2:
                     # merge c1 * x1 and c2 * x2
                     assert isinstance(x1.type, DataType)
-                    c = Constant(c1.value + c2.value, const_type=x1.type)  # type: ignore
+                    c = Constant(c1.value + c2.value, type=x1.type)  # type: ignore
                     if c.value == 0:
                         terms.pop(j)
                         terms.pop(i)

@@ -18,6 +18,8 @@ from tilus.ir.tensor import TMemoryTensor
 
 
 class TMemoryTensorWithMethods(TMemoryTensor):
+    __slots__ = ("__dict__",)
+
     def __init__(self, tensor: TMemoryTensor, builder: StmtBuilder):
         super().__init__(tensor.dtype, tensor.shape, tensor.optional_layout)
         self.tensor: TMemoryTensor = tensor

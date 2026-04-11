@@ -24,16 +24,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from functools import cached_property
 from typing import Any
+
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.type import DataType
 
 
+@py_class
 class Boolean(DataType):
-    def __init__(self):
-        super().__init__("bool", "bool", 1)
-
     def is_float(self) -> bool:
         return False
 
@@ -58,19 +58,19 @@ class Boolean(DataType):
         value = bool(value)
         return constant(value, self)
 
-    @cached_property
+    @property
     def one(self):
         return self.constant(True)
 
-    @cached_property
+    @property
     def zero(self):
         return self.constant(False)
 
-    @cached_property
+    @property
     def true(self):
         return self.constant(True)
 
-    @cached_property
+    @property
     def false(self):
         return self.constant(False)
 
@@ -83,4 +83,4 @@ class Boolean(DataType):
         raise ValueError("Boolean type has no maximum value.")
 
 
-boolean = Boolean()
+boolean = Boolean(_name="bool", _short_name="bool", _nbytes=1)

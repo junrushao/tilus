@@ -67,74 +67,53 @@ from tilus.hidet.utils import same_list
 from .base_functor import BaseFunctor, BaseRewriter, BaseVisitor
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class ExprFunctor(BaseFunctor):
+    _type_dispatch = {
+        Var: "visit_Var",
+        SymbolVar: "visit_Var",
+        Add: "visit_Add",
+        Sub: "visit_Sub",
+        Multiply: "visit_Multiply",
+        Div: "visit_Div",
+        Mod: "visit_Mod",
+        FloorDiv: "visit_FloorDiv",
+        Neg: "visit_Neg",
+        LessThan: "visit_LessThan",
+        LessEqual: "visit_LessEqual",
+        Equal: "visit_Equal",
+        NotEqual: "visit_NotEqual",
+        LogicalAnd: "visit_And",
+        LogicalOr: "visit_Or",
+        LogicalNot: "visit_Not",
+        BitwiseAnd: "visit_BitwiseAnd",
+        BitwiseOr: "visit_BitwiseOr",
+        BitwiseNot: "visit_BitwiseNot",
+        BitwiseXor: "visit_BitwiseXor",
+        LeftShift: "visit_LeftShift",
+        RightShift: "visit_RightShift",
+        TensorElement: "visit_TensorElement",
+        TensorSlice: "visit_TensorSlice",
+        IfThenElse: "visit_IfThenElse",
+        Call: "visit_Call",
+        Let: "visit_Let",
+        Constant: "visit_Constant",
+        Cast: "visit_Cast",
+        Dereference: "visit_Dereference",
+        Address: "visit_Address",
+        Reference: "visit_Reference",
+        PlaceholderExpr: "visit_PlaceholderExpr",
+    }
+
     def visit_dispatch(self, node):
-        if isinstance(node, Var):
-            return self.visit_Var(node)
-        elif isinstance(node, Add):
-            return self.visit_Add(node)
-        elif isinstance(node, Sub):
-            return self.visit_Sub(node)
-        elif isinstance(node, Multiply):
-            return self.visit_Multiply(node)
-        elif isinstance(node, Div):
-            return self.visit_Div(node)
-        elif isinstance(node, Mod):
-            return self.visit_Mod(node)
-        elif isinstance(node, FloorDiv):
-            return self.visit_FloorDiv(node)
-        elif isinstance(node, Neg):
-            return self.visit_Neg(node)
-        elif isinstance(node, LessThan):
-            return self.visit_LessThan(node)
-        elif isinstance(node, LessEqual):
-            return self.visit_LessEqual(node)
-        elif isinstance(node, Equal):
-            return self.visit_Equal(node)
-        elif isinstance(node, NotEqual):
-            return self.visit_NotEqual(node)
-        elif isinstance(node, LogicalAnd):
-            return self.visit_And(node)
-        elif isinstance(node, LogicalOr):
-            return self.visit_Or(node)
-        elif isinstance(node, LogicalNot):
-            return self.visit_Not(node)
-        elif isinstance(node, BitwiseAnd):
-            return self.visit_BitwiseAnd(node)
-        elif isinstance(node, BitwiseOr):
-            return self.visit_BitwiseOr(node)
-        elif isinstance(node, BitwiseNot):
-            return self.visit_BitwiseNot(node)
-        elif isinstance(node, BitwiseXor):
-            return self.visit_BitwiseXor(node)
-        elif isinstance(node, LeftShift):
-            return self.visit_LeftShift(node)
-        elif isinstance(node, RightShift):
-            return self.visit_RightShift(node)
-        elif isinstance(node, TensorElement):
-            return self.visit_TensorElement(node)
-        elif isinstance(node, TensorSlice):
-            return self.visit_TensorSlice(node)
-        elif isinstance(node, IfThenElse):
-            return self.visit_IfThenElse(node)
-        elif isinstance(node, Call):
-            return self.visit_Call(node)
-        elif isinstance(node, Let):
-            return self.visit_Let(node)
-        elif isinstance(node, Constant):
-            return self.visit_Constant(node)
-        elif isinstance(node, Cast):
-            return self.visit_Cast(node)
-        elif isinstance(node, Dereference):
-            return self.visit_Dereference(node)
-        elif isinstance(node, Address):
-            return self.visit_Address(node)
-        elif isinstance(node, Reference):
-            return self.visit_Reference(node)
-        elif isinstance(node, PlaceholderExpr):
-            return self.visit_PlaceholderExpr(node)
-        else:
-            return NotImplemented
+        method_name = ExprFunctor._type_dispatch.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
+        return NotImplemented
 
     def visit_Add(self, e: Add):
         raise NotImplementedError()
@@ -366,9 +345,11 @@ class ExprRewriter(ExprFunctor, BaseRewriter):
         return self.visit(e)
 
     def visit_Binary(self, e: BinaryExpr):
-        a = self(e.a)
-        b = self(e.b)
-        if a is e.a and b is e.b:
+        orig_a = e.a
+        orig_b = e.b
+        a = self(orig_a)
+        b = self(orig_b)
+        if _unchanged(a, orig_a) and _unchanged(b, orig_b):
             return e
         else:
             return Expr._binary(e.__class__, a, b)  # pylint: disable=protected-access
@@ -410,15 +391,17 @@ class ExprRewriter(ExprFunctor, BaseRewriter):
         return self.visit_Binary(e)
 
     def visit_Neg(self, e: Neg):
-        a = self(e.a)
-        if a is e.a:
+        orig_a = e.a
+        a = self(orig_a)
+        if _unchanged(a, orig_a):
             return e
         else:
             return Neg(a)
 
     def visit_Not(self, e: LogicalNot):
-        a = self(e.a)
-        if a is e.a:
+        orig_a = e.a
+        a = self(orig_a)
+        if _unchanged(a, orig_a):
             return e
         else:
             return LogicalNot(a)
@@ -433,103 +416,132 @@ class ExprRewriter(ExprFunctor, BaseRewriter):
         return self.visit_Binary(e)
 
     def visit_BitwiseNot(self, e: BitwiseNot):
-        base = self.visit(e.a)
-        if base is e.a:
+        orig_a = e.a
+        base = self.visit(orig_a)
+        if _unchanged(base, orig_a):
             return e
         else:
             return BitwiseNot(base)
 
     def visit_LeftShift(self, e: LeftShift):
-        base = self.visit(e.a)
-        cnt = self.visit(e.b)
-        if base is e.a and cnt is e.b:
+        orig_a = e.a
+        orig_b = e.b
+        base = self.visit(orig_a)
+        cnt = self.visit(orig_b)
+        if _unchanged(base, orig_a) and _unchanged(cnt, orig_b):
             return e
         else:
             return LeftShift(base, cnt)
 
     def visit_RightShift(self, e: RightShift):
-        base = self.visit(e.a)
-        cnt = self.visit(e.b)
-        if base is e.a and cnt is e.b:
+        orig_a = e.a
+        orig_b = e.b
+        base = self.visit(orig_a)
+        cnt = self.visit(orig_b)
+        if _unchanged(base, orig_a) and _unchanged(cnt, orig_b):
             return e
         else:
             return RightShift(base, cnt)
 
     def visit_TensorElement(self, e: TensorElement):
-        base = self(e.base)
-        indices = tuple(self(idx) if idx is not None else None for idx in e.indices)
-        if base is e.base and same_list(indices, e.indices):
+        orig_base = e.base
+        orig_indices = e.indices
+        base = self(orig_base)
+        indices = tuple(self(idx) if idx is not None else None for idx in orig_indices)
+        if _unchanged(base, orig_base) and same_list(indices, orig_indices):
             return e
         else:
             return TensorElement(base, indices, e.protected)
 
     def visit_TensorSlice(self, e: TensorSlice):
-        base = self(e.base)
-        indices = tuple(self(idx) if idx is not None else None for idx in e.indices)
-        starts = tuple(self(start) if start is not None else None for start in e.starts)
-        ends = tuple(self(end) if end is not None else None for end in e.ends)
-        if base is e.base and same_list(indices, e.indices) and same_list(starts, e.starts) and same_list(ends, e.ends):
+        orig_base = e.base
+        orig_indices = e.indices
+        orig_starts = e.starts
+        orig_ends = e.ends
+        base = self(orig_base)
+        indices = tuple(self(idx) if idx is not None else None for idx in orig_indices)
+        starts = tuple(self(start) if start is not None else None for start in orig_starts)
+        ends = tuple(self(end) if end is not None else None for end in orig_ends)
+        if (
+            _unchanged(base, orig_base)
+            and same_list(indices, orig_indices)
+            and same_list(starts, orig_starts)
+            and same_list(ends, orig_ends)
+        ):
             return e
         else:
             return TensorSlice(base, indices, starts, ends)
 
     def visit_IfThenElse(self, e: IfThenElse):
-        cond = self(e.cond)
-        then_expr = self(e.then_expr)
-        else_expr = self(e.else_expr)
-        if cond is e.cond and then_expr is e.then_expr and else_expr is e.else_expr:
+        orig_cond = e.cond
+        orig_then = e.then_expr
+        orig_else = e.else_expr
+        cond = self(orig_cond)
+        then_expr = self(orig_then)
+        else_expr = self(orig_else)
+        if _unchanged(cond, orig_cond) and _unchanged(then_expr, orig_then) and _unchanged(else_expr, orig_else):
             return e
         else:
             return IfThenElse(cond, then_expr, else_expr)
 
     def visit_Cast(self, e: Cast):
-        expr = self(e.expr)
-        if expr is e.expr:
+        orig_expr = e.expr
+        expr = self(orig_expr)
+        if _unchanged(expr, orig_expr):
             return e
         else:
             return cast(expr, e.target_type)
 
     def visit_Dereference(self, e: Dereference):
-        expr = self(e.expr)
-        if expr is e.expr:
+        orig_expr = e.expr
+        expr = self(orig_expr)
+        if _unchanged(expr, orig_expr):
             return e
         else:
             return Dereference(expr)
 
     def visit_Address(self, e: Address):
-        expr = self(e.expr)
-        if expr is e.expr:
+        orig_expr = e.expr
+        expr = self(orig_expr)
+        if _unchanged(expr, orig_expr):
             return e
         else:
             return Address(expr)
 
     def visit_Reference(self, e: Reference):
-        expr = self(e.expr)
-        if expr is e.expr:
+        orig_expr = e.expr
+        expr = self(orig_expr)
+        if _unchanged(expr, orig_expr):
             return e
         else:
             return Reference(expr)
 
     def visit_Call(self, e: Call):
-        func_var = self(e.func_var)
-        args = tuple(self(arg) for arg in e.args)
-        if func_var is e.func_var and same_list(args, e.args):
+        orig_func_var = e.func_var
+        orig_args = e.args
+        func_var = self(orig_func_var)
+        args = tuple(self(arg) for arg in orig_args)
+        if _unchanged(func_var, orig_func_var) and same_list(args, orig_args):
             return e
         else:
             return Call(func_var, args)
 
     def visit_Let(self, e: Let):
-        var = self(e.var)
-        value = self(e.value)
-        body = self(e.body)
-        if same_list([var, value, body], [e.var, e.value, e.body]):
+        orig_var = e.var
+        orig_value = e.value
+        orig_body = e.body
+        var = self(orig_var)
+        value = self(orig_value)
+        body = self(orig_body)
+        if same_list([var, value, body], [orig_var, orig_value, orig_body]):
             return e
         else:
             return Let(var, value, body)
 
     def visit_Var(self, e: Var):
-        tp = self(e.type)
-        if tp == e.type:
+        orig_tp = e.type
+        tp = self(orig_tp)
+        if tp == orig_tp:
             return e
         else:
             assert not isinstance(tp, SymbolVar)

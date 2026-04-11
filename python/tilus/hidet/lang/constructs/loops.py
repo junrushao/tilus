@@ -27,6 +27,8 @@ import builtins
 import itertools
 from typing import List, Optional, Sequence, Union
 
+import tvm_ffi
+
 from tilus.hidet.ir.expr import Constant, Expr, Var
 from tilus.hidet.ir.mapping import TaskMapping
 from tilus.hidet.ir.stmt import ForMappingStmt, ForStmt, ForStmtAttr, Stmt
@@ -155,7 +157,7 @@ def grid(*dim_extents, attrs: Optional[str] = None, bind_tuple=False):
         The sequence of indices in the grid to be iterated. (This is the semantics of hidet script, not this python
         function.)
     """
-    if len(dim_extents) == 1 and isinstance(dim_extents[0], (list, tuple)):
+    if len(dim_extents) == 1 and isinstance(dim_extents[0], (list, tuple, tvm_ffi.Array)):
         dim_extents = dim_extents[0]
         bind_tuple = True
     if len(dim_extents) > 1 and isinstance(dim_extents[-1], str):

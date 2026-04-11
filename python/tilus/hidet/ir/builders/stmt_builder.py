@@ -25,6 +25,8 @@
 # limitations under the License.
 from typing import Generic, List, Optional, Sequence, TypeVar, Union, cast
 
+import tvm_ffi
+
 from tilus.hidet.ir.dtypes import int32
 from tilus.hidet.ir.expr import Expr, Var, convert, var
 from tilus.hidet.ir.mapping import RepeatTaskMapping, TaskMapping, repeat_map
@@ -131,7 +133,7 @@ class StmtBuilder:
         self.scope_stack = [[]]
 
     def __iadd__(self, other: Union[Stmt, Expr, Sequence[Stmt]]):
-        assert isinstance(other, (Stmt, Expr, list, tuple))
+        assert isinstance(other, (Stmt, Expr, list, tuple, tvm_ffi.Array))
         self.append(other)
         return self
 
@@ -246,7 +248,7 @@ class StmtBuilder:
                 stmt = EvaluateStmt(stmt)
             self.scope_stack[-1].append(stmt)
         else:
-            assert isinstance(stmt, (tuple, list))
+            assert isinstance(stmt, (tuple, list, tvm_ffi.Array))
             for s in stmt:
                 self.append(s)
 

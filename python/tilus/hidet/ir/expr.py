@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import operator
 import string
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
+import tvm_ffi
+from tvm_ffi.dataclasses import field, py_class
 
 from tilus.hidet.ir.dtypes import IntegerType, boolean, int32, int64, promote_type, uint64
 
@@ -56,6 +58,7 @@ from .type import (
 PyScalar = Union[bool, int, float, complex, str]
 
 
+@py_class
 class Expr(Node):
     def __bool__(self) -> bool:
         raise TypeError(
@@ -173,7 +176,7 @@ class Expr(Node):
         return self._binary(BitwiseXor, other, self)
 
     def __getitem__(self, items):
-        if not isinstance(items, (tuple, list)):
+        if not isinstance(items, (tuple, list, tvm_ffi.Array)):
             items = [items]
         indices = []
         starts = []
@@ -215,7 +218,9 @@ class Expr(Node):
     def __complex__(self):
         raise TypeError("Cannot convert hidet.ir.Expr to complex.")
 
-    __hash__ = object.__hash__  # use default hash function
+    # Use tvm_ffi Object's handle-based hash so dict lookups work
+    # across different Python wrappers of the same underlying C handle.
+    __hash__ = tvm_ffi.Object.__hash__
 
     def read(self, items, protected=True):
         te = self[items]
@@ -309,203 +314,172 @@ class Expr(Node):
         return cls(a, b)
 
 
+@py_class
 class BinaryExpr(Expr):
-    def __init__(self, a: Expr, b: Expr):
-        self.a: Expr = a
-        self.b: Expr = b
-
-        assert isinstance(a, Expr)
-        assert isinstance(b, Expr)
+    a: Any
+    b: Any
 
 
+@py_class
 class UnaryExpr(Expr):
-    def __init__(self, a: Expr):
-        self.a: Expr = convert(a)
-
-        assert isinstance(a, Expr)
+    a: Any
 
 
+@py_class
 class Condition(Expr):
+    """Marker base class for condition expressions. Kept for backward compatibility."""
+
     pass
 
 
-class LessThan(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+@py_class
+class LessThan(BinaryExpr):
+    pass
 
 
-class LessEqual(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+@py_class
+class LessEqual(BinaryExpr):
+    pass
 
 
-class Equal(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
-
+@py_class
+class Equal(BinaryExpr):
     def __bool__(self):
-        r = object.__eq__(self.a, self.b)
-        if r is NotImplemented:
-            return False
-        else:
-            return True
+        a, b = self.a, self.b
+        # Use same_as for tvm_ffi Objects (handle-based identity) since
+        # py_class fields return different Python wrappers for the same handle.
+        if isinstance(a, tvm_ffi.Object) and isinstance(b, tvm_ffi.Object):
+            return a.same_as(b)
+        return a is b
 
 
-class NotEqual(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+@py_class
+class NotEqual(BinaryExpr):
+    pass
 
 
-class LogicalAnd(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+@py_class
+class LogicalAnd(BinaryExpr):
+    pass
 
 
-class LogicalOr(Condition, BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+@py_class
+class LogicalOr(BinaryExpr):
+    pass
 
 
-class LogicalNot(Condition, UnaryExpr):
-    def __init__(self, a):
-        super().__init__(a)
+@py_class
+class LogicalNot(UnaryExpr):
+    pass
 
 
+@py_class
 class Neg(UnaryExpr):
-    def __init__(self, a):
-        super().__init__(a)
+    pass
 
 
+@py_class
 class Add(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class Sub(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class Multiply(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class Div(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class FloorDiv(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    def __post_init__(self):
         raise ValueError("FloorDiv is not supported in hidet by design from now on.")
 
 
+@py_class
 class Mod(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class BitwiseNot(UnaryExpr):
-    def __init__(self, a):
-        super().__init__(a)
+    pass
 
 
+@py_class
 class BitwiseAnd(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class BitwiseOr(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class BitwiseXor(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class LeftShift(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class RightShift(BinaryExpr):
-    def __init__(self, a, b):
-        super().__init__(a, b)
+    pass
 
 
+@py_class
 class TensorElement(Expr):
-    def __init__(self, base, indices, protected=False):
-        self.base: Expr = base
-        self.indices: Tuple[Expr, ...] = indices
-        self.protected: bool = protected
-
-        assert isinstance(base, Expr) and isinstance(indices, tuple)
-        for idx in indices:
-            assert isinstance(idx, Expr)
+    base: Any
+    indices: Any
+    protected: bool = False
 
 
+@py_class
 class TensorSlice(Expr):
-    def __init__(self, base, indices, starts, ends):
-        # a[3, 4:, :5, :] will be represented by
-        # base: a
-        # indices: [3, None, None, None]
-        # starts: [None, 4, None, None]
-        # ends: [None, None, 5, None]
-        self.base: Expr = base
-        self.indices: Tuple[Optional[Expr], ...] = indices
-        self.starts: Tuple[Optional[Expr], ...] = starts
-        self.ends: Tuple[Optional[Expr], ...] = ends
-
-        assert isinstance(indices, tuple) and isinstance(starts, tuple) and isinstance(ends, tuple)
-        for idx in indices:
-            assert idx is None or isinstance(idx, Expr)
-        for start in starts:
-            assert start is None or isinstance(start, Expr)
-        for end in ends:
-            assert end is None or isinstance(end, Expr)
+    base: Any
+    indices: Any
+    starts: Any
+    ends: Any
 
 
+@py_class
 class Call(Expr):
-    def __init__(self, func_var, args):
-        self.func_var: Var = func_var
-        self.args: Tuple[Expr, ...] = args
-        assert isinstance(func_var, Var) and isinstance(args, tuple)
-        for arg in args:
-            assert isinstance(arg, Expr)
+    func_var: Any
+    args: Any
 
 
+@py_class
 class Let(Expr):
-    def __init__(self, var, value, body):
-        self.var: Var = var
-        self.value: Expr = value
-        self.body: Expr = body
-
-        assert isinstance(var, Var) and isinstance(value, Expr) and isinstance(body, Expr)
+    var: Any
+    value: Any
+    body: Any
 
 
+@py_class
 class Cast(Expr):
-    def __init__(self, expr, target_type: BaseType):
-        self.expr: Expr = expr
-        self.target_type: BaseType = target_type
-
-        assert isinstance(target_type, BaseType), f"target_type {target_type} is not a BaseType"
+    expr: Any
+    target_type: Any
 
 
+@py_class
 class Constant(Expr):
-    # reuse commonly-used constant objects
-    _constant_pool: Dict[Tuple[Union[int, float, bool], str], Constant] = {}
+    value: Any
+    type: Any
 
-    def __init__(
-        self,
-        value: Union[np.ndarray, float, int, complex, str],
-        const_type: Union[DataType, StringType, TensorType, PointerType],
-    ):
-        self.value: Union[np.ndarray, float, int, complex, str] = value
-        self.type: Union[DataType, StringType, TensorType, PointerType] = const_type
+    # reuse commonly-used constant objects
+    _constant_pool: ClassVar[Dict[Tuple[Union[int, float, bool], str], Constant]] = {}
 
     def is_scalar(self) -> bool:
         return isinstance(self.type, DataType)
@@ -562,6 +536,7 @@ class Constant(Expr):
         return super(Constant, Constant)._binary(cls, a, b)
 
 
+@py_class
 class IfThenElse(Expr):
     """
     The if-then-else expression.
@@ -576,71 +551,48 @@ class IfThenElse(Expr):
         The expression to be evaluated if the condition is false.
     """
 
-    def __init__(self, cond: Expr, then_expr: Expr, else_expr: Expr):
-        self.cond: Expr = cond
-        self.then_expr: Expr = then_expr
-        self.else_expr: Expr = else_expr
-
-        assert isinstance(cond, Expr) and isinstance(then_expr, Expr) and isinstance(else_expr, Expr)
+    cond: Any
+    then_expr: Any
+    else_expr: Any
 
 
+@py_class
 class Dereference(Expr):
-    def __init__(self, expr: Expr):
-        self.expr: Expr = expr
-
-        assert isinstance(expr, Expr)
+    expr: Any
 
 
+@py_class
 class Address(Expr):
-    def __init__(self, expr: Expr):
-        self.expr: Expr = expr
-
-        assert isinstance(expr, Expr)
+    expr: Any
 
 
+@py_class
 class Reference(Expr):
-    def __init__(self, expr: Expr):
-        self.expr: Expr = expr
-
-        assert isinstance(expr, Expr)
+    expr: Any
 
 
+@py_class
 class Var(Expr):
-    id_clock = 0
+    hint: Any
+    type: Any
+    name: Any = None
+    id: int = field(default_factory=lambda: Var.new_id())
 
-    def __init__(self, hint: Optional[str], type: BaseType, name: Optional[str] = None):
-        """
-        A variable may have a hint, name, and id.
-
-        self.hint is used to determine the name in codegen. Different vars may have the
-        same hint. If two vars have the same hint such as 'x', the final name would be like 'x1', 'x2'.
-
-        self.name is used to store the name of the variables that will be used directly in codegen, such as
-        "threadIdx.x". The field self.name and self.hint are used exclusively. If self.name is not None,
-        self.hint will be ignored, otherwise, self.hint will be used to determine the name in codegen.
-
-        self.id is used to track the allocation of Var object in python, which is only used to help us to distinguish
-        different Var in python debugger.
-        """
-        self.hint: Optional[str] = hint
-        self.name: Optional[str] = name
-        self.type: Union[BaseType, TensorType, TensorPointerType, FuncType] = type
-        self.id: int = self.new_id()
+    id_clock: ClassVar[int] = 0
 
     @staticmethod
     def new_id():
-        return 0
+        Var.id_clock += 1
+        return Var.id_clock
 
     @staticmethod
     def reset_id_counter():
         Var.id_clock = 0
 
 
+@py_class
 class SymbolVar(Var):
-    name2symbol: Dict[str, SymbolVar] = {}
-
-    def __init__(self, name: str, dtype: DataType):
-        super().__init__(hint=None, type=dtype, name=name)
+    name2symbol: ClassVar[Dict[str, SymbolVar]] = {}
 
 
 # the following are used as type hints
@@ -708,7 +660,7 @@ def convert(
         return constant(obj, data_type("float32"))
     elif isinstance(obj, str):
         return constant(obj, string_type())
-    elif isinstance(obj, (tuple, list)):
+    elif isinstance(obj, (tuple, list, tvm_ffi.Array)):
         return tuple(convert(v) for v in obj)
     elif obj is None:
         return None
@@ -727,7 +679,7 @@ def as_expr(obj: Union[float, bool, int, str, Expr]) -> Expr:
     elif isinstance(obj, float):
         return default_float_dtype.constant(obj)
     elif isinstance(obj, str):
-        return Constant(obj, const_type=string_type())
+        return Constant(obj, string_type())
     else:
         raise ValueError(obj)
 
@@ -1066,7 +1018,7 @@ def symbol_var(name: str, dtype: Union[DataType, PointerType, str] = "int32") ->
     if name not in SymbolVar.name2symbol:
         if not name.isidentifier():
             raise ValueError('Invalid symbol name "{}", must be a valid identifier'.format(name))
-        SymbolVar.name2symbol[name] = SymbolVar(name, dtype)
+        SymbolVar.name2symbol[name] = SymbolVar(hint=None, type=dtype, name=name)
     else:
         if not type_equal(SymbolVar.name2symbol[name].type, dtype):
             raise ValueError(

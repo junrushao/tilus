@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import no_type_check
-
 from tilus.hidet.ir.dtypes import int32, int64, uint8, uint32
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.func import Function
@@ -31,7 +29,6 @@ def register_functions():
 
     for nbits in range(1, 8):
 
-        @no_type_check
         @script
         def _load_subbyte(uint8_ptr: ~uint8, input_bit_offset: int32, index: int32) -> uint8:
             attrs.func_kind = "cuda_internal"

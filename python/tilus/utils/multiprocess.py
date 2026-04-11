@@ -40,6 +40,11 @@ def _wrapped_func(job_index):
 
 
 def parallel_imap(func: Callable, jobs: Sequence[Any], num_workers: Optional[int] = None) -> Iterable[Any]:
+    if num_workers is None:
+        from tilus.option import get_option
+
+        num_workers = get_option("parallel_workers")
+
     if num_workers == 1 or len(jobs) <= 1:
         yield from map(func, jobs)
         return
@@ -52,11 +57,6 @@ def parallel_imap(func: Callable, jobs: Sequence[Any], num_workers: Optional[int
     _job_queue = JobQueue(func, jobs)
 
     try:
-        if num_workers is None:
-            from tilus.option import get_option
-
-            num_workers = get_option("parallel_workers")
-
         ctx = multiprocessing.get_context("fork")
         with ctx.Pool(num_workers) as pool:
             yield from pool.imap(_wrapped_func, range(len(jobs)))
@@ -65,6 +65,14 @@ def parallel_imap(func: Callable, jobs: Sequence[Any], num_workers: Optional[int
 
 
 def parallel_map(func: Callable, jobs: Sequence[Any], num_workers: Optional[int] = None) -> Iterable[Any]:
+    if num_workers is None:
+        from tilus.option import get_option
+
+        num_workers = get_option("parallel_workers")
+
+    if num_workers == 1 or len(jobs) <= 1:
+        return list(map(func, jobs))
+
     global _job_queue
 
     if _job_queue is not None:
@@ -73,11 +81,6 @@ def parallel_map(func: Callable, jobs: Sequence[Any], num_workers: Optional[int]
     _job_queue = JobQueue(func, jobs)
 
     try:
-        if num_workers is None:
-            from tilus.option import get_option
-
-            num_workers = get_option("parallel_workers")
-
         ctx = multiprocessing.get_context("fork")
         with ctx.Pool(num_workers) as pool:
             ret = pool.map(_wrapped_func, range(len(jobs)), chunksize=1)

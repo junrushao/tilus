@@ -15,11 +15,11 @@
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass
-from functools import cached_property
-from typing import Sequence, Union
+from typing import Any, Sequence, Union
 
 import tabulate
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr
 from tilus.hidet.ir.utils.index_transform import index_deserialize, index_serialize
@@ -28,8 +28,8 @@ from tilus.utils import prod
 Int = Union[Expr, int]
 
 
-@dataclass(frozen=True, eq=False)
-class MultiFunction:
+@py_class
+class MultiFunction(tvm_ffi.Object):
     """A multi-function represents a function that maps (x0, x1, ..., x_{n-1}) to a set of integers Y.
 
     Let f be the multi-function, we have
@@ -95,21 +95,21 @@ class MultiFunction:
             modes=tuple(modes) if not isinstance(modes, tuple) else modes,
         )
 
-    @cached_property
+    @property
     def _image_shape(self) -> tuple[int, ...]:
         return tuple(self.mode_shape[mode] if mode >= 0 else -mode for mode in self.modes)
 
-    @cached_property
+    @property
     def size(self) -> int:
         """Returns the size of the multi-function, which is the product of the mode shape."""
         return prod(self.mode_shape)
 
-    @cached_property
+    @property
     def image_size(self) -> int:
         """Returns the size of the image of the multi-function, which is the product of the image shape."""
         return prod(self._image_shape)
 
-    @cached_property
+    @property
     def mode_groups(self) -> list[list[int]]:
         """Returns the mode groups of the multi-function.
 
@@ -146,7 +146,11 @@ class MultiFunction:
     def __eq__(self, other):
         if not isinstance(other, MultiFunction):
             return NotImplemented
-        return self.shape == other.shape and self.mode_shape == other.mode_shape and self.modes == other.modes
+        return (
+            tuple(self.shape) == tuple(other.shape)
+            and tuple(self.mode_shape) == tuple(other.mode_shape)
+            and tuple(self.modes) == tuple(other.modes)
+        )
 
     def __mul__(self, other: MultiFunction) -> MultiFunction:
         from tilus.ir.layout.ops.utils import get_mode_groups

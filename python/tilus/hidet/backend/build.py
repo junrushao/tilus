@@ -25,6 +25,7 @@
 # limitations under the License.
 import functools
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -170,7 +171,14 @@ class NVCC(SourceCompiler):
 
         # add tvm-ffi header paths
         include_dirs = list(include_dirs)
-        include_dirs.append(tvm_ffi.libinfo.find_include_path())
+        tvm_ffi_include = tvm_ffi.libinfo.find_include_path()
+        include_dirs.append(tvm_ffi_include)
+        # dlpack headers may be in a submodule directory
+        import pathlib
+
+        dlpack_include = pathlib.Path(tvm_ffi_include).parent / "3rdparty" / "dlpack" / "include"
+        if dlpack_include.exists():
+            include_dirs.append(str(dlpack_include))
         include_dirs.append(libinfo.find_include_path())
 
         # The following command compiles the cuda source code to a shared library
@@ -188,7 +196,10 @@ class NVCC(SourceCompiler):
             # optimize host side code via -O3
             "-O3",
             # host compiler options: enable openmp, avx2, unroll loops and fast math
-            "-Xcompiler -fPIC,-m64,-march={cpu_arch},-O3,-funroll-loops,-ffast-math".format(cpu_arch=cpu_arch),
+            "-Xcompiler -fPIC{m64},-march={cpu_arch},-O3,-funroll-loops,-ffast-math".format(
+                m64=",-m64" if platform.machine() in ("x86_64", "AMD64") else "",
+                cpu_arch=cpu_arch,
+            ),
             # use c++11 standard
             "-std=c++17",
             # the target PTX and SASS version.

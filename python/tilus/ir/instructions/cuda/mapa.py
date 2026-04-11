@@ -14,7 +14,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.dtypes import uint32
 from tilus.hidet.ir.expr import Expr
@@ -22,7 +24,7 @@ from tilus.ir.inst import Instruction, InstructionError
 from tilus.ir.tensor import RegisterTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class MapSharedAddrInst(Instruction):
     target_rank: Expr
 

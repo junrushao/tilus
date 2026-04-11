@@ -23,13 +23,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import string
-from typing import Dict, List, Union
+from __future__ import annotations
 
-from tilus.hidet.ir.expr import Call, Var
+import string
+from typing import Any
+
+from tvm_ffi.dataclasses import py_class
+
+from tilus.hidet.ir.expr import Call
 from tilus.hidet.ir.node import Node
-from tilus.hidet.ir.stmt import Stmt
-from tilus.hidet.ir.type import BaseType
+
+_VALID_KINDS = {
+    "cuda_kernel",
+    "cuda_internal",
+    "hip_kernel",
+    "hip_internal",
+    "cpu_kernel",
+    "cpu_internal",
+    "public",
+}
 
 
 def check_func_name(name: str):
@@ -40,6 +52,7 @@ def check_func_name(name: str):
             raise ValueError("Cannot use {} in function name".format(repr(c)))
 
 
+@py_class
 class Function(Node):
     """
     Valid Attrs:
@@ -62,24 +75,18 @@ class Function(Node):
             the minimal number of thread blocks in launch bound of cuda kernel function
     """
 
-    def __init__(self, name: str, params, body, ret_type, kind: str, attrs=None):
-        check_func_name(name)
-        self.name: str = name
-        self.kind: str = kind
-        assert isinstance(kind, str) and kind in [
-            "cuda_kernel",
-            "cuda_internal",
-            "hip_kernel",
-            "hip_internal",
-            "cpu_kernel",
-            "cpu_internal",
-            "public",
-        ]
-        self.params: List[Var] = params
-        self.body: Stmt = body
-        self.ret_type: BaseType = ret_type
-        # self.extern_vars: List[Var] = extern_vars if extern_vars else []
-        self.attrs: Dict[str, Union[int, float, str, Node]] = attrs if attrs else {}
+    name: str
+    params: Any
+    body: Any
+    ret_type: Any
+    kind: str
+    attrs: Any = None
+
+    def __post_init__(self):
+        check_func_name(self.name)
+        assert isinstance(self.kind, str) and self.kind in _VALID_KINDS
+        if self.attrs is None:
+            self.attrs = {}
 
     def __call__(self, *args, **kwargs) -> Call:
         raise ValueError("Can only call script function in another script function, or lower it to execute.")

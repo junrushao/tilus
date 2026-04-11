@@ -24,6 +24,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # pylint: disable=bad-staticmethod-argument
+from tilus.hidet.ir.dtypes.boolean import Boolean
+from tilus.hidet.ir.dtypes.complex import ComplexType
+from tilus.hidet.ir.dtypes.floats import FloatType
+from tilus.hidet.ir.dtypes.floats_subbyte import FloatSubbyteType
+from tilus.hidet.ir.dtypes.integer import IntegerType
+from tilus.hidet.ir.dtypes.integer_subbyte import IntegerSubbyteType
+from tilus.hidet.ir.dtypes.vector import VectorType
 from tilus.hidet.ir.type import (
     ArrayType,
     DataType,
@@ -41,30 +48,39 @@ from tilus.hidet.utils import same_list
 from .base_functor import BaseFunctor, BaseRewriter, BaseVisitor
 
 
+def _unchanged(a, b):
+    """Check if a is the same as b, using same_as for tvm_ffi Objects."""
+    return a is b or (hasattr(a, "same_as") and a.same_as(b))
+
+
 class TypeFunctor(BaseFunctor):
+    _type_dispatch = {
+        IntegerType: "visit_DataType",
+        FloatType: "visit_DataType",
+        Boolean: "visit_DataType",
+        ComplexType: "visit_DataType",
+        VectorType: "visit_DataType",
+        IntegerSubbyteType: "visit_DataType",
+        FloatSubbyteType: "visit_DataType",
+        TensorType: "visit_TensorType",
+        PointerType: "visit_PointerType",
+        TensorPointerType: "visit_TensorPointerType",
+        ReferenceType: "visit_ReferenceType",
+        StringType: "visit_StringType",
+        ArrayType: "visit_ArrayType",
+        VoidType: "visit_VoidType",
+        FuncType: "visit_FuncType",
+        OpaqueType: "visit_OpaqueType",
+    }
+
     def visit_dispatch(self, node):
+        method_name = TypeFunctor._type_dispatch.get(type(node))
+        if method_name is not None:
+            return getattr(self, method_name)(node)
+        # fallback for unknown DataType subclasses
         if isinstance(node, DataType):
             return self.visit_DataType(node)
-        elif isinstance(node, TensorType):
-            return self.visit_TensorType(node)
-        elif isinstance(node, PointerType):
-            return self.visit_PointerType(node)
-        elif isinstance(node, TensorPointerType):
-            return self.visit_TensorPointerType(node)
-        elif isinstance(node, ReferenceType):
-            return self.visit_ReferenceType(node)
-        elif isinstance(node, StringType):
-            return self.visit_StringType(node)
-        elif isinstance(node, ArrayType):
-            return self.visit_ArrayType(node)
-        elif isinstance(node, VoidType):
-            return self.visit_VoidType(node)
-        elif isinstance(node, FuncType):
-            return self.visit_FuncType(node)
-        elif isinstance(node, OpaqueType):
-            return self.visit_OpaqueType(node)
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def visit_DataType(self, t: DataType):
         raise NotImplementedError()
@@ -138,38 +154,45 @@ class TypeRewriter(TypeFunctor, BaseRewriter):
         return t
 
     def visit_TensorType(self, t: TensorType):
-        dtype = self.visit(t.dtype)
-        shape = self.visit(t.shape)
-        layout = self.visit(t.layout)
-        if dtype == t.dtype and layout is t.layout and same_list(shape, t.shape):
+        orig_dtype = t.dtype
+        orig_shape = t.shape
+        orig_layout = t.layout
+        dtype = self.visit(orig_dtype)
+        shape = self.visit(orig_shape)
+        layout = self.visit(orig_layout)
+        if dtype == orig_dtype and _unchanged(layout, orig_layout) and same_list(shape, orig_shape):
             return t
         else:
             return TensorType(dtype, shape, layout)
 
     def visit_ArrayType(self, t: ArrayType):
-        base_type = self.visit(t.base_type)
-        if base_type == t.base_type:
+        orig_base_type = t.base_type
+        base_type = self.visit(orig_base_type)
+        if base_type == orig_base_type:
             return t
         else:
             return ArrayType(base_type, t.size)
 
     def visit_PointerType(self, t: PointerType):
-        base_type = self.visit(t.base_type)
-        if base_type == t.base_type:
+        orig_base_type = t.base_type
+        base_type = self.visit(orig_base_type)
+        if base_type == orig_base_type:
             return t
         else:
             return PointerType(base_type)
 
     def visit_TensorPointerType(self, t: TensorPointerType):
-        tensor_type = self.visit(t.tensor_type)
-        if tensor_type == t.tensor_type:
+        orig_tensor_type = t.tensor_type
+        tensor_type = self.visit(orig_tensor_type)
+        if tensor_type == orig_tensor_type:
             return t
         else:
             return TensorPointerType(tensor_type)
 
     def visit_ReferenceType(self, t: ReferenceType):
-        base_type = self.visit(t.base_type)
-        if base_type == t.base_type:
+        orig_base_type = t.base_type
+        base_type = self.visit(orig_base_type)
+        if base_type == orig_base_type:
             return t
         else:
             return ReferenceType(base_type)
@@ -184,9 +207,11 @@ class TypeRewriter(TypeFunctor, BaseRewriter):
         if t.type_infer_func is not None:
             return t
         else:
-            ret_type = self.visit(t.ret_type)
-            param_types = [self.visit(param_type) for param_type in t.param_types]
-            if ret_type == t.ret_type and same_list(param_types, t.param_types):
+            orig_ret_type = t.ret_type
+            orig_param_types = t.param_types
+            ret_type = self.visit(orig_ret_type)
+            param_types = [self.visit(param_type) for param_type in orig_param_types]
+            if ret_type == orig_ret_type and same_list(param_types, orig_param_types):
                 return t
             else:
                 return FuncType(param_types, ret_type)

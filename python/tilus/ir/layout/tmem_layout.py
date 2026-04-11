@@ -14,13 +14,14 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Sequence
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.node import IRNode
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class TMemoryLayout(IRNode):
     shape: tuple[int, ...]
     column_strides: tuple[int, ...]

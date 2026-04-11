@@ -15,17 +15,19 @@
 from __future__ import annotations
 
 import functools
-from dataclasses import dataclass
+from typing import Any  # noqa: F401
 
-from tilus.hidet.ir.dtypes import bf16, f16, f32, i8, i32
-from tilus.hidet.ir.type import DataType
+import tvm_ffi
+from tvm_ffi.dataclasses import py_class
+
+from tilus.hidet.ir.dtypes import DataType, bf16, f16, f32, i8, i32
 from tilus.ir.inst import Instruction
 from tilus.ir.layout import RegisterLayout
 from tilus.ir.layout.ops import column_local, column_spatial, local, spatial
 from tilus.ir.tensor import RegisterTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class DotInst(Instruction):
     @staticmethod
     def create(
@@ -40,8 +42,8 @@ class DotInst(Instruction):
         )
 
 
-@dataclass(frozen=True, eq=False)
-class AtomicMmaConfig:
+@py_class
+class AtomicMmaConfig(tvm_ffi.Object):
     name: str
     m: int
     n: int

@@ -14,14 +14,15 @@
 # limitations under the License.
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Optional
+
+from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.node import IRNode
 from tilus.ir.tensor import GlobalTensor, RegisterTensor, SharedTensor, Tensor, TMemoryTensor
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class Instruction(IRNode):
     output: Optional[Tensor]
     inputs: tuple[Tensor, ...]
@@ -89,14 +90,21 @@ class Instruction(IRNode):
     @property
     def attributes(self) -> dict[str, Any]:
         attrs = {}
-        for k, v in self.__dict__.items():
-            if k in ["output", "inputs"]:
-                continue
-            attrs[k] = v
+        skip = {"output", "inputs"}
+        for cls in type(self).__mro__:
+            if cls is object:
+                break
+            for name, anno in getattr(cls, "__annotations__", {}).items():
+                if name in skip or name in attrs:
+                    continue
+                # Skip ClassVar fields (with from __future__ import annotations, they're strings)
+                if isinstance(anno, str) and "ClassVar" in anno:
+                    continue
+                attrs[name] = getattr(self, name)
         return attrs
 
 
-@dataclass(frozen=True, eq=False)
+@py_class
 class InstructionConfig(IRNode):
     pass
 

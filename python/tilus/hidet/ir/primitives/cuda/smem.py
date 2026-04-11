@@ -84,4 +84,4 @@ def set_kernel_max_dynamic_smem_bytes(func: Var, max_dynamic_smem_bytes: Union[E
 
     max_dynamic_smem_bytes = convert(max_dynamic_smem_bytes)
     template_string = r"cudaFuncSetAttribute({}, cudaFuncAttributeMaxDynamicSharedMemorySize, {});"
-    return BlackBoxStmt(template_string, func, max_dynamic_smem_bytes)
+    return BlackBoxStmt(template_string=template_string, exprs=(func, max_dynamic_smem_bytes))
