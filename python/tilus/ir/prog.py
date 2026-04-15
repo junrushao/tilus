@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from tvm_ffi import ir_traits as tr
 from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.func import Function
@@ -25,6 +26,10 @@ from tilus.ir.utils import frozendict
 
 @py_class
 class Program(IRNode):
+    """A program is a collection of named functions."""
+
+    __ffi_ir_traits__ = tr.ModuleTraits("$field:functions")
+
     functions: Any
 
     @staticmethod

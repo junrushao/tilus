@@ -33,6 +33,9 @@ from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tupl
 
 import numpy as np
 import tvm_ffi
+from tvm_ffi import ir_traits as tr
+from tvm_ffi import pyast
+from tvm_ffi.access_path import AccessPath
 from tvm_ffi.dataclasses import field, py_class
 
 from tilus.hidet.ir.dtypes import IntegerType, boolean, int32, int64, promote_type, uint64
@@ -205,9 +208,9 @@ class Expr(Node):
         raise ValueError()
 
     def __str__(self):
-        from tilus.hidet.ir.tools import astext
+        from tvm_ffi import pyast  # pylint: disable=import-outside-toplevel
 
-        return str(astext(self))
+        return pyast.to_python(self)
 
     def __int__(self):
         raise TypeError("Cannot convert hidet.ir.Expr to int.")
@@ -334,16 +337,18 @@ class Condition(Expr):
 
 @py_class
 class LessThan(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "<", None, None)
 
 
 @py_class
 class LessEqual(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "<=", None, None)
 
 
 @py_class
 class Equal(BinaryExpr):
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "==", None, None)
+
     def __bool__(self):
         a, b = self.a, self.b
         # Use same_as for tvm_ffi Objects (handle-based identity) since
@@ -355,92 +360,96 @@ class Equal(BinaryExpr):
 
 @py_class
 class NotEqual(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "!=", None, None)
 
 
 @py_class
 class LogicalAnd(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "and", None, None)
 
 
 @py_class
 class LogicalOr(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "or", None, None)
 
 
 @py_class
 class LogicalNot(UnaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.UnaryOpTraits("$field:a", "not")
 
 
 @py_class
 class Neg(UnaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.UnaryOpTraits("$field:a", "-")
 
 
 @py_class
 class Add(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "+", None, None)
 
 
 @py_class
 class Sub(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "-", None, None)
 
 
 @py_class
 class Multiply(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "*", None, None)
 
 
 @py_class
 class Div(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "/", None, None)
 
 
 @py_class
 class FloorDiv(BinaryExpr):
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "//", None, None)
+
     def __post_init__(self):
         raise ValueError("FloorDiv is not supported in hidet by design from now on.")
 
 
 @py_class
 class Mod(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "%", None, None)
 
 
 @py_class
 class BitwiseNot(UnaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.UnaryOpTraits("$field:a", "~")
 
 
 @py_class
 class BitwiseAnd(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "&", None, None)
 
 
 @py_class
 class BitwiseOr(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "|", None, None)
 
 
 @py_class
 class BitwiseXor(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "^", None, None)
 
 
 @py_class
 class LeftShift(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", "<<", None, None)
 
 
 @py_class
 class RightShift(BinaryExpr):
-    pass
+    __ffi_ir_traits__ = tr.BinOpTraits("$field:a", "$field:b", ">>", None, None)
 
 
 @py_class
 class TensorElement(Expr):
+    __ffi_ir_traits__ = tr.LoadTraits("$field:base", "$field:indices", None)
+
     base: Any
     indices: Any
     protected: bool = False
@@ -456,6 +465,8 @@ class TensorSlice(Expr):
 
 @py_class
 class Call(Expr):
+    __ffi_ir_traits__ = tr.CallTraits("$field:func_var", "$field:args", None, None, None, None)
+
     func_var: Any
     args: Any
 
@@ -471,6 +482,12 @@ class Let(Expr):
 class Cast(Expr):
     expr: Any
     target_type: Any
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: cast(target_type, expr) — standard function-call syntax
+        target = printer(self.target_type, path.attr("target_type"))
+        expr = printer(self.expr, path.attr("expr"))
+        return pyast.Call(pyast.Id("cast"), [target, expr])
 
 
 @py_class
@@ -489,6 +506,38 @@ class Constant(Expr):
 
     def is_string(self) -> bool:
         return isinstance(self.type, StringType)
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        if self.value is None:
+            tp = printer(self.type, path.attr("type"))
+            return pyast.Call(pyast.Id("Constant"), [pyast.Literal(None)], ["type"], [tp])
+        if self.is_tensor():
+            return pyast.Call(
+                pyast.Id("ConstTensor"),
+                [pyast.Id(str(self.value.shape)), printer(self.type, path.attr("type"))],
+            )
+        elif self.is_string():
+            return pyast.Literal(str(self.value))
+        elif self.is_scalar():
+            dtype = self.type.name
+            if dtype == "float32":
+                return pyast.Id("{}f".format(float(self.value)))
+            elif dtype == "float16":
+                return pyast.Call(pyast.Id("half"), [pyast.Literal(float(self.value))])
+            elif dtype == "bfloat16":
+                return pyast.Call(pyast.Id("bfloat16"), [pyast.Literal(float(self.value))])
+            elif dtype == "int32":
+                return pyast.Literal(int(self.value))
+            elif dtype == "bool":
+                return pyast.Literal(True if self.value else False)
+            else:
+                return pyast.Call(pyast.Id(dtype), [pyast.Literal(self.value)])
+        elif isinstance(self.type, PointerType):
+            tp = printer(self.type, path.attr("type"))
+            val = printer(self.value, path.attr("value"))
+            return pyast.Call(tp, [val])
+        else:
+            return pyast.Id(repr(self.value))
 
     def __int__(self):
         return int(self.value)
@@ -555,14 +604,26 @@ class IfThenElse(Expr):
     then_expr: Any
     else_expr: Any
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: ternary expression `then_expr if cond else else_expr`
+        # Operation IfThenElse operand order: [cond, then, else]
+        cond = printer(self.cond, path.attr("cond"))
+        then_expr = printer(self.then_expr, path.attr("then_expr"))
+        else_expr = printer(self.else_expr, path.attr("else_expr"))
+        return pyast.Operation(pyast.OperationKind.IfThenElse, [cond, then_expr, else_expr])
+
 
 @py_class
 class Dereference(Expr):
+    __ffi_ir_traits__ = tr.UnaryOpTraits("$field:expr", "*")
+
     expr: Any
 
 
 @py_class
 class Address(Expr):
+    __ffi_ir_traits__ = tr.UnaryOpTraits("$field:expr", "&")
+
     expr: Any
 
 
@@ -573,12 +634,23 @@ class Reference(Expr):
 
 @py_class
 class Var(Expr):
+    __ffi_ir_traits__ = tr.ValueTraits("$field:hint", "$field:type", None)
+
     hint: Any
     type: Any
     name: Any = None
     id: int = field(default_factory=lambda: Var.new_id())
 
     id_clock: ClassVar[int] = 0
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: `name` field is used by codegen for actual C variable names, so we
+        # cannot mutate it in __post_init__. The display name (name ?? hint ?? "v")
+        # must be a printer-only concern. `$method:` doesn't resolve Python methods.
+        if not printer.var_is_defined(self):
+            name = self.name if self.name else (self.hint if self.hint else "v")
+            printer.var_def(name, self, None)
+        return printer.var_get(self)
 
     @staticmethod
     def new_id():

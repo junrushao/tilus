@@ -29,6 +29,9 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import tvm_ffi
+from tvm_ffi import ir_traits as tr
+from tvm_ffi import pyast
+from tvm_ffi.access_path import AccessPath
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.node import Node
@@ -93,6 +96,8 @@ class DataType(BaseType):
     _name: str
     _short_name: str
     _nbytes: int
+
+    __ffi_ir_traits__ = tr.PrimTyTraits("$field:_name")
 
     def __str__(self):
         return "hidet.{}".format(self.name)
@@ -244,6 +249,8 @@ class TensorType(BaseType):
     shape: Any = None
     layout: Any = None
 
+    __ffi_ir_traits__ = tr.TensorTyTraits("$field:shape", "$field:dtype", None)
+
     def __invert__(self):
         return TensorPointerType.from_tensor_type(self)
 
@@ -259,12 +266,12 @@ class TensorType(BaseType):
 
 @py_class
 class VoidType(BaseType):
-    pass
+    __ffi_ir_traits__ = tr.PrimTyTraits("void")
 
 
 @py_class
 class StringType(BaseType):
-    pass
+    __ffi_ir_traits__ = tr.PrimTyTraits("char*")
 
 
 @py_class
@@ -278,6 +285,10 @@ class PointerType(BaseType):
             self.base_type = data_type(self.base_type)
         # todo: move the following attributes to DeclareStmt
         self.specifiers = list(self.specifiers) if self.specifiers else []
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: pointer types print as just the base type for readability
+        return printer(self.base_type, path.attr("base_type"))
 
     def __call__(self, x):
         from tilus.hidet.ir.expr import Constant, Expr, cast, constant  # pylint: disable=redefined-outer-name
@@ -304,6 +315,10 @@ class TensorPointerType(BaseType):
     """
 
     tensor_type: TensorType
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: tensor pointer types print as just the tensor type for readability
+        return printer(self.tensor_type, path.attr("tensor_type"))
 
     @staticmethod
     def from_tensor_type(tp: TensorType) -> TensorPointerType:

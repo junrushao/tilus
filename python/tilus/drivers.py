@@ -330,17 +330,37 @@ def build_program(prog: Program, options: Optional[BuildOptions] = None) -> str:
         # 0. verify the program
         verify(prog)
 
+        dump_ir = tilus.option.get_option("debug.dump_ir")
+
         import time as _time
+
+        if dump_ir:
+            print("=" * 60)
+            print("[Tilus IR] Original program")
+            print("=" * 60)
+            print(str(prog))
 
         # 1. optimize the program (tilus-level passes)
         _t0 = _time.time()
         prog = optimize_program(prog, options=options, cache_dir=cache_dir)
         logger.info("Tilus IR optimization: %.3fs", _time.time() - _t0)
 
+        if dump_ir:
+            print("=" * 60)
+            print("[Tilus IR] After optimization")
+            print("=" * 60)
+            print(str(prog))
+
         # 2. generate the low-level IR (Hidet IR)
         _t0 = _time.time()
         ir_module: IRModule = generate_ir_module(prog)
         logger.info("Hidet IR generation: %.3fs", _time.time() - _t0)
+
+        if dump_ir:
+            print("=" * 60)
+            print("[Hidet IR] After lowering")
+            print("=" * 60)
+            print(str(ir_module))
 
         # 3-6. optimize, codegen, and compile the low-level IR
         _t0 = _time.time()

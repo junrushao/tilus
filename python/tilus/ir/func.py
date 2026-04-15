@@ -17,6 +17,7 @@ from __future__ import annotations as _
 from typing import Any, Mapping, Optional, Sequence
 
 import tvm_ffi
+from tvm_ffi import ir_traits as tr
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
@@ -84,6 +85,14 @@ class Metadata(tvm_ffi.Object):
 
 @py_class
 class Function(IRNode):
+    __ffi_ir_traits__ = tr.FuncTraits(
+        "$field:name",
+        tr.RegionTraits("$field:body", "$field:params", None, None),
+        None,
+        None,
+        None,
+    )
+
     name: str
     params: tuple[Var, ...]
     body: Stmt

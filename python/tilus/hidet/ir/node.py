@@ -32,9 +32,9 @@ from tvm_ffi.dataclasses import py_class
 @py_class
 class Node(tvm_ffi.Object):
     def __str__(self):
-        from tilus.hidet.ir.tools.printer import astext  # pylint: disable=import-outside-toplevel
+        from tvm_ffi import pyast  # pylint: disable=import-outside-toplevel
 
-        return astext(self)
+        return pyast.to_python(self)
 
     def __repr__(self):
         return str(self)

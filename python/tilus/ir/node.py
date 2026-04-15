@@ -19,8 +19,6 @@ from tvm_ffi.dataclasses import py_class
 @py_class
 class IRNode(tvm_ffi.Object):
     def __str__(self):
-        from tilus.ir.tools.printer import PrintContext
+        from tvm_ffi import pyast  # pylint: disable=import-outside-toplevel
 
-        printer = PrintContext.current()
-
-        return str(printer(self))
+        return pyast.to_python(self)

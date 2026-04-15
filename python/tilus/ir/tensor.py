@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 import tvm_ffi
+from tvm_ffi import ir_traits as tr
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
@@ -94,8 +95,11 @@ class RegisterTensor(Tensor):
         with compiler pass.
     """
 
+    __ffi_ir_traits__ = tr.ValueTraits("$field:_print_name", None, None)
+
     shape: tuple[int, ...]
     optional_layout: Optional[RegisterLayout] = None
+    _print_name: str = "_r"
 
     def __getitem__(self, indices: tuple[Expr | int | slice] | Expr | int | slice) -> RegisterTensor:
         raise RuntimeError("register_tensor[...] could only be used in Tilus Script.")
@@ -556,8 +560,11 @@ class SharedTensor(Tensor):
         with compiler pass.
     """
 
+    __ffi_ir_traits__ = tr.ValueTraits("$field:_print_name", None, None)
+
     shape: tuple[int, ...]
     optional_layout: Optional[SharedLayout]
+    _print_name: str = "_s"
 
     def __getitem__(self, indices: tuple[Expr | int, ...] | Expr | int) -> SharedTensor:
         raise RuntimeError("shared_tensor[...] could only be used in Tilus Script.")
@@ -654,8 +661,11 @@ class SharedTensor(Tensor):
 
 @py_class
 class TMemoryTensor(Tensor):
+    __ffi_ir_traits__ = tr.ValueTraits("$field:_print_name", None, None)
+
     shape: tuple[int, ...]
     optional_layout: Optional[TMemoryLayout]
+    _print_name: str = "_t"
 
     @staticmethod
     def create(dtype: DataType, shape: Sequence[int], optional_layout: Optional[TMemoryLayout] = None) -> TMemoryTensor:
@@ -706,6 +716,10 @@ class GlobalTensor(Tensor):
     """
 
     layout: GlobalLayout
+
+    __ffi_ir_traits__ = tr.ValueTraits("$field:_print_name", None, None)
+
+    _print_name: str = "_g"
 
     @staticmethod
     def create(dtype: DataType, layout: GlobalLayout) -> GlobalTensor:

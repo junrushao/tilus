@@ -16,6 +16,9 @@ from __future__ import annotations
 
 from typing import List, Optional, Sequence
 
+from tvm_ffi import ir_traits as tr
+from tvm_ffi import pyast
+from tvm_ffi.access_path import AccessPath
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Expr, Var
@@ -31,6 +34,8 @@ class Stmt(IRNode):
 
 @py_class
 class SeqStmt(Stmt):
+    __ffi_ir_traits__ = tr.SeqTraits("$field:seq")
+
     seq: tuple[Stmt, ...]
 
     @staticmethod
@@ -40,6 +45,11 @@ class SeqStmt(Stmt):
 
 @py_class
 class ForStmt(Stmt):
+    __ffi_ir_traits__ = tr.ForTraits(
+        tr.RegionTraits("$field:body", "$field:iter_var", None, None),
+        None, "$field:extent", None, None, None, None, None,
+    )
+
     iter_var: Var
     extent: Expr
     body: Stmt
@@ -88,6 +98,25 @@ class ThreadGroupStmt(Stmt):
     num_threads: int
     body: Stmt
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: thread_begin=-1 means "elect-any" which we render specially as
+        # `with elect_any(num_threads=N):` vs `with thread_group(begin, num_threads):`
+        if self.thread_begin == -1:
+            ctx = pyast.Call(pyast.Id("elect_any"), [], ["num_threads"], [pyast.Literal(self.num_threads)])
+        else:
+            ctx = pyast.Call(
+                pyast.Id("thread_group"),
+                [pyast.Literal(self.thread_begin), pyast.Literal(self.num_threads)],
+            )
+        body = printer(self.body, path.attr("body"))
+        if isinstance(body, pyast.StmtBlock):
+            body_stmts = list(body.stmts)
+        elif isinstance(body, pyast.Stmt):
+            body_stmts = [body]
+        else:
+            body_stmts = [pyast.ExprStmt(body)]
+        return pyast.With(None, ctx, body_stmts)
+
     @staticmethod
     def create(thread_begin: int, num_threads: int, body: Stmt) -> ThreadGroupStmt:
         return ThreadGroupStmt(thread_begin, num_threads, body)
@@ -95,6 +124,8 @@ class ThreadGroupStmt(Stmt):
 
 @py_class
 class IfStmt(Stmt):
+    __ffi_ir_traits__ = tr.IfTraits("$field:cond", tr.RegionTraits("$field:then_body", None, None, None), tr.RegionTraits("$field:else_body", None, None, None))
+
     cond: Expr
     then_body: Stmt
     else_body: Stmt
@@ -105,28 +136,36 @@ class IfStmt(Stmt):
 
 @py_class
 class WhileStmt(Stmt):
+    __ffi_ir_traits__ = tr.WhileTraits("$field:cond", tr.RegionTraits("$field:body", None, None, None))
+
     cond: Expr
     body: Stmt
 
 
 @py_class
 class BreakStmt(Stmt):
-    pass
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        return pyast.ExprStmt(pyast.Id("break"))
 
 
 @py_class
 class ReturnStmt(Stmt):
-    pass
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        return pyast.ExprStmt(pyast.Id("return"))
 
 
 @py_class
 class DeclareStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssignTraits("$field:var", "$field:init", None, None, None, None)
+
     var: Var
     init: Optional[Expr]
 
 
 @py_class
 class AssignStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssignTraits("$field:var", "$field:value", None, None, None, None)
+
     var: Var
     value: Expr
 
@@ -140,6 +179,22 @@ class LetStmt(Stmt):
     def __post_init__(self):
         assert len(self.bind_vars) == len(self.bind_values) > 0
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: multi-binding semantics need var_def for each bound variable
+        for bv in self.bind_vars:
+            if not printer.var_is_defined(bv):
+                printer.var_def(bv.name or bv.hint or "v", bv, None)
+        items = []
+        for i, (bv, bval) in enumerate(zip(self.bind_vars, self.bind_values)):
+            lhs = printer(bv, path.attr("bind_vars").array_item(i))
+            rhs = printer(bval, path.attr("bind_values").array_item(i))
+            items.append(pyast.Assign(lhs, rhs))
+        if self.body is not None:
+            items.append(printer(self.body, path.attr("body")))
+        if len(items) == 1:
+            return items[0]
+        return items
+
     @staticmethod
     def create(bind_vars: Sequence[Var], bind_values: Sequence[Expr], body: Stmt) -> LetStmt:
         return LetStmt(tuple(bind_vars), tuple(bind_values), body)
@@ -147,6 +202,8 @@ class LetStmt(Stmt):
 
 @py_class
 class EvaluateStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssignTraits(None, "$field:expr", None, None, None, None)
+
     expr: Expr
     pred: Optional[Expr]
 
@@ -157,16 +214,44 @@ class TensorItemPtrStmt(Stmt):
     tensor: Tensor
     space: str  # 'generic', 'shared', 'global', 'local'
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: binds a Hidet Var to a tensor item pointer — need var_def + structured call
+        if not printer.var_is_defined(self.ptr_var):
+            printer.var_def(self.ptr_var.name or self.ptr_var.hint or "v", self.ptr_var, None)
+        lhs = printer(self.ptr_var, path.attr("ptr_var"))
+        tensor_expr = printer(self.tensor, path.attr("tensor"))
+        rhs = pyast.Call(
+            pyast.Attr(tensor_expr, "item_ptr"),
+            [],
+            ["space"],
+            [pyast.Literal(self.space)],
+        )
+        ty = printer(self.ptr_var.type, path.attr("ptr_var").attr("type")) if self.ptr_var.type is not None else None
+        return pyast.Assign(lhs, rhs, ty)
+
 
 @py_class
 class TensorItemValueStmt(Stmt):
     var: Var
     tensor: Tensor
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: binds a Hidet Var to a tensor item value — need var_def + structured call
+        if not printer.var_is_defined(self.var):
+            printer.var_def(self.var.name or self.var.hint or "v", self.var, None)
+        lhs = printer(self.var, path.attr("var"))
+        tensor_expr = printer(self.tensor, path.attr("tensor"))
+        rhs = pyast.Call(pyast.Attr(tensor_expr, "item"), [])
+        ty = printer(self.var.type, path.attr("var").attr("type")) if self.var.type is not None else None
+        return pyast.Assign(lhs, rhs, ty)
+
 
 @py_class
 class InstStmt(Stmt):
     inst: Instruction
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        return printer(self.inst, path.attr("inst"))
 
 
 def seq_stmt(seq: Sequence[Stmt | Instruction]) -> Stmt:

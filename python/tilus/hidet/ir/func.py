@@ -28,6 +28,7 @@ from __future__ import annotations
 import string
 from typing import Any
 
+from tvm_ffi import ir_traits as tr
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Call
@@ -90,6 +91,14 @@ class Function(Node):
 
     def __call__(self, *args, **kwargs) -> Call:
         raise ValueError("Can only call script function in another script function, or lower it to execute.")
+
+    __ffi_ir_traits__ = tr.FuncTraits(
+        "$field:name",
+        tr.RegionTraits("$field:body", "$field:params", None, None),
+        "$field:attrs",
+        "$field:kind",
+        None,
+    )
 
     def get_attr(self, attr_name, default=None, allow_missing=False):
         """

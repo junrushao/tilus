@@ -29,6 +29,9 @@ import enum
 from typing import Any, ClassVar, List, Optional, Sequence, Tuple, Union
 
 import tvm_ffi
+from tvm_ffi import ir_traits as tr
+from tvm_ffi import pyast
+from tvm_ffi.access_path import AccessPath
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Constant, Expr, Var, convert
@@ -211,6 +214,8 @@ class Stmt(Node):
 
 @py_class
 class EvaluateStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssignTraits(None, "$field:expr", None, None, None, None)
+
     expr: Any
 
     def __post_init__(self):
@@ -229,9 +234,26 @@ class DeclareStmt(Stmt):
         self.init = convert(self.init)
         self.scope = self.scope if self.scope else DeclareScope.Default
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: Hidet DeclareStmt has scope/is_static flags beyond simple assignment.
+        # Renders as: var: type = init  [# static, scope]
+        if not printer.var_is_defined(self.var):
+            printer.var_def(self.var.name or self.var.hint or "v", self.var, None)
+        lhs = printer(self.var, path.attr("var"))
+        ty = printer(self.var.type, path.attr("var").attr("type")) if self.var.type is not None else None
+        if self.init is not None:
+            rhs = printer(self.init, path.attr("init"))
+            return pyast.Assign(lhs, rhs, ty)
+        elif ty is not None:
+            return pyast.Assign(lhs, None, ty)
+        else:
+            return pyast.ExprStmt(lhs)
+
 
 @py_class
 class BufferStoreStmt(Stmt):
+    __ffi_ir_traits__ = tr.StoreTraits("$field:buf", "$field:value", "$field:indices", None)
+
     buf: Any
     indices: Any
     value: Any
@@ -245,6 +267,8 @@ class BufferStoreStmt(Stmt):
 
 @py_class
 class AssignStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssignTraits("$field:var", "$field:value", None, None, None, None)
+
     var: Any
     value: Any
 
@@ -255,6 +279,8 @@ class AssignStmt(Stmt):
 
 @py_class
 class ReturnStmt(Stmt):
+    __ffi_ir_traits__ = tr.ReturnTraits("$field:ret_value")
+
     ret_value: Any = None
 
 
@@ -273,9 +299,35 @@ class LetStmt(Stmt):
         assert len(self.bind_vars) > 0
         self.bind_values = [convert(bind_value) for bind_value in self.bind_values]
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: multi-binding semantics need var_def for each bound variable
+        for bv in self.bind_vars:
+            if not printer.var_is_defined(bv):
+                printer.var_def(bv.name or bv.hint or "v", bv, None)
+        items = []
+        for i, (bv, bval) in enumerate(zip(self.bind_vars, self.bind_values)):
+            lhs = printer(bv, path.attr("bind_vars").array_item(i))
+            rhs = printer(bval, path.attr("bind_values").array_item(i))
+            items.append(pyast.Assign(lhs, rhs))
+        if self.body is not None:
+            items.append(printer(self.body, path.attr("body")))
+        if len(items) == 1:
+            return items[0]
+        return items
+
 
 @py_class
 class ForStmt(Stmt):
+    __ffi_ir_traits__ = tr.ForTraits(
+        tr.RegionTraits("$field:body", "$field:loop_var", None, None),
+        None,
+        "$field:extent",
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
     DEFAULT_UNROLL_LIMIT: ClassVar[int] = 32
 
     loop_var: Any
@@ -293,6 +345,12 @@ class ForStmt(Stmt):
 
 @py_class
 class ForMappingStmt(Stmt):
+    __ffi_ir_traits__ = tr.ForTraits(
+        tr.RegionTraits("$field:body", "$field:loop_vars", None, None),
+        None, None, None, None, None, None,
+        "for_mapping",
+    )
+
     loop_vars: Any
     mapping: Any
     worker: Any
@@ -304,22 +362,32 @@ class ForMappingStmt(Stmt):
 
 @py_class
 class WhileStmt(Stmt):
+    __ffi_ir_traits__ = tr.WhileTraits("$field:cond", tr.RegionTraits("$field:body", None, None, None))
+
     cond: Any
     body: Any
 
 
 @py_class
 class BreakStmt(Stmt):
-    pass
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        return pyast.ExprStmt(pyast.Id("break"))
 
 
 @py_class
 class ContinueStmt(Stmt):
-    pass
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        return pyast.ExprStmt(pyast.Id("continue"))
 
 
 @py_class
 class IfStmt(Stmt):
+    __ffi_ir_traits__ = tr.IfTraits(
+        "$field:cond",
+        tr.RegionTraits("$field:then_body", None, None, None),
+        tr.RegionTraits("$field:else_body", None, None, None),
+    )
+
     cond: Any
     then_body: Any = None
     else_body: Any = None
@@ -330,6 +398,8 @@ class IfStmt(Stmt):
 
 @py_class
 class AssertStmt(Stmt):
+    __ffi_ir_traits__ = tr.AssertTraits("$field:cond", "$field:msg")
+
     cond: Any
     msg: Any = None
 
@@ -377,9 +447,20 @@ class BlackBoxStmt(Stmt):
         if expect_args_num != len(self.exprs):
             raise ValueError("Invalid template string: {} for {} args".format(self.template_string, len(self.exprs)))
 
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: template-based C code injection — render as a comment.
+        # Use .to_python() to render pyast nodes to text (str() gives Tier 3 debug repr).
+        args = [printer(e, path.attr("exprs").array_item(i)) for i, e in enumerate(self.exprs)]
+        text = self.template_string
+        for arg in args:
+            text = text.replace("{}", arg.to_python() if hasattr(arg, "to_python") else str(arg), 1)
+        return pyast.Comment(text)
+
 
 @py_class
 class SeqStmt(Stmt):
+    __ffi_ir_traits__ = tr.SeqTraits("$field:seq")
+
     seq: Any
 
     def __post_init__(self):
@@ -399,6 +480,20 @@ class LaunchKernelStmt(Stmt):
     block_dim: Any
     shared_mem_bytes: Any
     target: Any
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        # Reason: CUDA kernel launch with <<<grid, block, smem>>> semantics
+        func = printer(self.func_var, path.attr("func_var"))
+        args = [printer(a, path.attr("args").array_item(i)) for i, a in enumerate(self.args)]
+        grid = printer(self.grid_dim, path.attr("grid_dim"))
+        block = printer(self.block_dim, path.attr("block_dim"))
+        smem = printer(self.shared_mem_bytes, path.attr("shared_mem_bytes"))
+        return pyast.ExprStmt(pyast.Call(
+            pyast.Id("launch_kernel"),
+            [func] + args,
+            ["grid", "block", "shared_mem"],
+            [grid, block, smem],
+        ))
 
     def __post_init__(self):
         if self.target is not None and self.target not in self._supported_targets:

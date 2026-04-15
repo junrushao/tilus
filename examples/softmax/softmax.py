@@ -19,7 +19,7 @@ import torch
 from tilus import float16, float32, int32
 from tilus.utils import benchmark_func, cdiv
 
-# tilus.option.parallel_workers(1)
+tilus.option.debug.dump_ir()
 
 @tilus.autotune("block_m", [1, 4, 8])
 @tilus.autotune("block_n", [128, 256, 512, 1024])

@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from tvm_ffi import pyast
+from tvm_ffi.access_path import AccessPath
 from tvm_ffi.dataclasses import py_class
 
 from tilus.ir.node import IRNode
@@ -26,6 +28,25 @@ from tilus.ir.tensor import GlobalTensor, RegisterTensor, SharedTensor, Tensor, 
 class Instruction(IRNode):
     output: Optional[Tensor]
     inputs: tuple[Tensor, ...]
+
+    def __ffi_text_print__(self, printer: pyast.IRPrinter, path: AccessPath):
+        inst_name = type(self).__name__.removesuffix("Inst")
+        args = [printer(inp, path.attr("inputs").array_item(i)) for i, inp in enumerate(self.inputs)]
+        kwargs_keys = []
+        kwargs_values = []
+        for k, v in self.attributes.items():
+            if v is None:
+                continue
+            kwargs_keys.append(k)
+            kwargs_values.append(printer(v, path.attr(k)))
+        if kwargs_keys:
+            rhs = pyast.Call(pyast.Id(inst_name), args, kwargs_keys, kwargs_values)
+        else:
+            rhs = pyast.Call(pyast.Id(inst_name), args)
+        if self.output is not None:
+            lhs = printer(self.output, path.attr("output"))
+            return pyast.Assign(lhs, rhs)
+        return rhs
 
     @property
     def shared_output(self) -> SharedTensor:

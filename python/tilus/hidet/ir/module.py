@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Sequence
 
+from tvm_ffi import ir_traits as tr
 from tvm_ffi.dataclasses import py_class
 
 from tilus.hidet.ir.expr import Var
@@ -42,6 +43,8 @@ class IRModule(Node):
 
     An IRModule contains one or more functions. It is the basic compilation unit of hidet.
     """
+
+    __ffi_ir_traits__ = tr.ModuleTraits("$field:functions")
 
     functions: Any = None
     global_vars: Any = None
